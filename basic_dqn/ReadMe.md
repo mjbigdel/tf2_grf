@@ -9,3 +9,6 @@ this is dqn with:
   - double dqn
   
   - dueling networks
+  
+
+Inspired by openAI baselines
