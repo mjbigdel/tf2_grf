@@ -1,5 +1,5 @@
 import tensorflow as tf
-from basic_dqn.replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
+from basic_dqn_FP.replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
 from common.schedules import LinearSchedule
 
 def init_replay_memory(config):

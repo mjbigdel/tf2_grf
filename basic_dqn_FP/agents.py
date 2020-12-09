@@ -1,4 +1,3 @@
-from _ast import mod
 
 import tensorflow as tf
 import numpy as np
@@ -9,7 +8,7 @@ from common import logger
 from common.tf2_utils import huber_loss
 from common.utils import init_env
 
-from basic_dqn.utils import init_replay_memory, init_network
+from basic_dqn_FP.utils import init_replay_memory, init_network
 
 
 class Agent(tf.Module):

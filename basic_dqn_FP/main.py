@@ -1,8 +1,8 @@
 
 import tensorflow as tf
 
-from basic_dqn.agents import Agent
-from basic_dqn.Config import Basic_DQN_Conf
+from basic_dqn_FP.agents import Agent
+from basic_dqn_FP.Config import Basic_DQN_FP_Conf
 from common.utils import set_global_seeds, init_env
 
 
@@ -14,7 +14,7 @@ def init_agent(config, env):
 def train():
 
     tf.config.run_functions_eagerly(True)
-    config = Basic_DQN_Conf()
+    config = Basic_DQN_FP_Conf()
     set_global_seeds(config.seed)
 
     # init env

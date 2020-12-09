@@ -13,6 +13,25 @@ def create_env(num_agents, render, stacked, env_name, representationType, channe
     from common.multi_agent_gfootball import SingleAgent
     return SingleAgent(num_agents, render, stacked, env_name, representationType, channel_dim, rewards)
 
+def init_env(config, mode='train'):
+    data_path = config.data_path
+    num_agents = config.num_agents
+    stacked = config.stacked
+    env_name = config.env_name
+    channel_dim = config.channel_dim
+    representationType = config.representationType
+    train_rewards = config.train_rewards
+    test_rewards = config.test_rewards
+
+    if mode == 'train':
+        rewards = train_rewards
+        render = config.render_train
+    else:
+        rewards = test_rewards
+        render = config.render_test
+    return create_ma_env(num_agents, render, stacked, env_name, representationType, channel_dim,
+                         rewards, data_path)
+
 
 def plotLearning(x, scores, epsilons, filename, lines=None):
     fig = plt.figure()
@@ -111,43 +130,5 @@ def explained_variance_2d(ypred, y):
     out[vary < 1e-10] = 0
     return out
 
-def ncc(ypred, y):
-    return np.corrcoef(ypred, y)[1,0]
 
-def flatten_arrays(arrs):
-    return np.concatenate([arr.flat for arr in arrs])
-
-def unflatten_vector(vec, shapes):
-    i=0
-    arrs = []
-    for shape in shapes:
-        size = np.prod(shape)
-        arr = vec[i:i+size].reshape(shape)
-        arrs.append(arr)
-        i += size
-    return arrs
-
-def discount_with_boundaries(X, New, gamma):
-    """
-    X: 2d array of floats, time x features
-    New: 2d array of bools, indicating when a new episode has started
-    """
-    Y = np.zeros_like(X)
-    T = X.shape[0]
-    Y[T-1] = X[T-1]
-    for t in range(T-2, -1, -1):
-        Y[t] = X[t] + gamma * Y[t+1] * (1 - New[t+1])
-    return Y
-
-def test_discount_with_boundaries():
-    gamma=0.9
-    x = np.array([1.0, 2.0, 3.0, 4.0], 'float32')
-    starts = [1.0, 0.0, 0.0, 1.0]
-    y = discount_with_boundaries(x, starts, gamma)
-    assert np.allclose(y, [
-        1 + gamma * 2 + gamma**2 * 3,
-        2 + gamma * 3,
-        3,
-        4
-    ])
 
