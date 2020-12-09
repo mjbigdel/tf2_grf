@@ -1,0 +1,6 @@
+2020-11-30 14:53:02,586 [INFO] Dump written to ./rllib_test/DQN//episode_done_20201130-145252078708.dump
+2020-11-30 14:53:02,587 [INFO] Episode reward: 0.00 score: [0, 0], steps: 217, FPS: 20.5, gameFPS: 461.4
+2020-11-30 14:53:22,012 [INFO] Dump written to ./rllib_test/DQN//episode_done_20201130-145302666966.dump
+2020-11-30 14:53:22,012 [INFO] Episode reward: 0.00 score: [0, 0], steps: 401, FPS: 20.6, gameFPS: 458.4
+2020-11-30 14:53:29,332 [INFO] Dump written to ./rllib_test/DQN//episode_done_20201130-145322091243.dump
+2020-11-30 14:53:29,332 [INFO] Episode reward: 0.00 score: [0, 0], steps: 150, FPS: 20.5, gameFPS: 427.3
