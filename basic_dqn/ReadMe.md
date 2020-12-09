@@ -1,11 +1,11 @@
-- this is dqn with:
+this is dqn with:
 
-  -n-step Return
+  - n-step Return
   
-  -single agent
+  - single agent
   
-  -multi-agent with shared network
+  - multi-agent with shared network
   
-  -double dqn
+  - double dqn
   
-  -dueling networks
+  - dueling networks
