@@ -49,6 +49,7 @@ class Agent(tf.Module):
         self.eps = tf.Variable(0.0)
         self.one_hot_agents = tf.expand_dims(tf.one_hot(self.agent_ids, len(self.agent_ids), dtype=tf.float32), axis=1)
         print(f'self.onehot_agent.shape is {self.one_hot_agents.shape}')
+        self.dummy_fps = np.ones((1, self.config.num_agents - 1, self.config.num_actions))
 
 
     def build_agent_heads(self):
@@ -116,11 +117,13 @@ class Agent(tf.Module):
         """
 
         actions = []
+        fps = []
         for a in self.agent_ids:
-            inputs = {0: np.expand_dims(obs[a], 0), 1: self.one_hot_agents[a]}
+            inputs = {0: np.expand_dims(obs[a], 0), 1: self.one_hot_agents[a], 2: self.dummy_fps}
             fc_values = self.model(inputs)
             # print(f'fc_values.shape {fc_values.shape}')
             q_values = self.agent_heads[a](fc_values)
+            fps.append(q_values.numpy()[0])
             # print(f'q_values.shape {q_values.shape}')
             deterministic_actions = tf.argmax(q_values, axis=1)
             # print(f'deterministic_actions {deterministic_actions}')
@@ -145,7 +148,7 @@ class Agent(tf.Module):
             self.eps.assign(update_eps)
 
         # print(f'actions {actions}')
-        return actions
+        return actions, fps
 
     @tf.function
     def value(self, obs):
@@ -166,7 +169,7 @@ class Agent(tf.Module):
 
 
         for a in self.agent_ids:
-            inputs = {0: np.expand_dims(obs[a], 0), 1: self.one_hot_agents[a]}
+            inputs = {0: np.expand_dims(obs[a], 0), 1: self.one_hot_agents[a], 2: self.dummy_fps}
             fc_values = self.target_model(inputs)
             q_values = self.target_agent_heads[a](fc_values)
 
@@ -184,43 +187,45 @@ class Agent(tf.Module):
         return values
 
     @tf.function()
-    def nstep_loss(self, obses_t, actions, rewards, weights, agent_id):
+    def nstep_loss(self, obses_t_a, actions_a, rewards_a, weights_a, fps_a, agent_id):
         # print(f'obses_t.shape {obses_t.shape}')
-        s = obses_t.shape
-        obses_t = tf.reshape(obses_t, (s[0]*s[1], *s[2:]))
-        # print(f'obses_t.shape {obses_t.shape}')
-        s = actions.shape
-        actions = tf.reshape(actions, (s[0] * s[1], *s[2:]))
+        s = obses_t_a.shape
+        obses_t_a = tf.reshape(obses_t_a, (s[0] * s[1], *s[2:]))
+        # print(f'obses_t_a.shape {obses_t_a.shape}')
+        s = actions_a.shape
+        actions_a = tf.reshape(actions_a, (s[0] * s[1], *s[2:]))
         # print(f'actions.shape {actions.shape}')
-        s = rewards.shape
-        rewards = tf.reshape(rewards, (s[0] * s[1], *s[2:]))
-        # print(f'rewards.shape {rewards.shape}')
-        s = weights.shape
-        weights = tf.reshape(weights, (s[0] * s[1], *s[2:]))
-        # print(f'weights.shape {weights.shape}')
+        s = rewards_a.shape
+        rewards_a = tf.reshape(rewards_a, (s[0] * s[1], *s[2:]))
+        # print(f'rewards_a.shape {rewards_a.shape}')
+        s = weights_a.shape
+        weights_a = tf.reshape(weights_a, (s[0] * s[1], *s[2:]))
+        # print(f'weights_a.shape {weights_a.shape}')
+        s = fps_a.shape
+        fps_a = tf.reshape(fps_a, (s[0] * s[1], *s[2:]))
+        # print(f'fps_a.shape {fps_a.shape}')
 
-        inputs = {0: obses_t, 1: tf.tile(self.one_hot_agents[agent_id], (s[0]*s[1], 1))}
-        fc_values = self.model(inputs)
+        inputs_a = {0: obses_t_a, 1: tf.tile(self.one_hot_agents[agent_id], (s[0]*s[1], 1)), 2: fps_a}
+        fc_values = self.model(inputs_a)
         q_t = self.agent_heads[agent_id](fc_values)
 
-        q_t_selected = tf.reduce_sum(q_t * tf.one_hot(actions, self.config.num_actions, dtype=tf.float32), 1)
+        q_t_selected = tf.reduce_sum(q_t * tf.one_hot(actions_a, self.config.num_actions, dtype=tf.float32), 1)
         # print(f'q_t_selected.shape is {q_t_selected.shape}')
 
-        td_error = q_t_selected - tf.stop_gradient(rewards)
+        td_error = q_t_selected - tf.stop_gradient(rewards_a)
 
         errors = huber_loss(td_error)
-        weighted_loss = tf.reduce_mean(weights * errors)
+        weighted_loss = tf.reduce_mean(weights_a * errors)
 
         return weighted_loss, td_error
 
     @tf.function()
-    def train(self, obses_t, actions, rewards, weights):
-        # print(f'obses_t.shape {obses_t.shape}')
+    def train(self, obses_t, actions, rewards, weights, fps):
         td_errors = []
         loss = []
         with tf.GradientTape() as tape:
             for a in self.agent_ids:
-                loss_a, td_error = self.loss(obses_t[:, a], actions[:, a], rewards[:, a], weights[:, a], a)
+                loss_a, td_error = self.loss(obses_t[:, a], actions[:, a], rewards[:, a], weights[:, a], fps[:, a], a)
                 loss.append(loss_a)
                 td_errors.append(td_error)
 
@@ -305,15 +310,19 @@ class Agent(tf.Module):
                 print(f'time spend to perform {t - self.config.print_freq} to {t} steps is {nseconds} ')
                 print('eps update', self.exploration.value(t))
 
-            mb_obs, mb_rewards, mb_actions, mb_values, mb_dones = [], [], [], [], []
+            mb_obs, mb_rewards, mb_actions, mb_fps, mb_dones = [], [], [], [], []
             # mb_states = states
             epinfos = []
             for _ in range(self.config.n_steps):
-                actions = self.choose_action(tf.constant(obs), update_eps=update_eps)
+                actions, fps_ = self.choose_action(tf.constant(obs), update_eps=update_eps)
                 # print(f'actions is {actions}')
+                fps = []
+                for a in self.agent_ids:
+                    fps.append(fps_[:a] + fps_[a + 1:])
 
                 mb_obs.append(obs.copy())
                 mb_actions.append(actions)
+                mb_fps.append(fps)
                 mb_dones.append([float(done) for _ in self.agent_ids])
 
                 obs1, rews, done, info = self.env.step(actions)
@@ -337,6 +346,7 @@ class Agent(tf.Module):
             mb_obs = np.asarray(mb_obs, dtype=obs[0].dtype).swapaxes(0, 1)
             mb_actions = np.asarray(mb_actions, dtype=actions[0].dtype).swapaxes(0, 1)
             mb_rewards = np.asarray(mb_rewards, dtype=np.float32).swapaxes(0, 1)
+            mb_fps = np.asarray(mb_fps, dtype=np.float32).swapaxes(0, 1)
             mb_dones = np.asarray(mb_dones, dtype=np.bool).swapaxes(0, 1)
             mb_masks = mb_dones[:, -1]
             mb_dones = mb_dones[:, 1:]
@@ -361,23 +371,24 @@ class Agent(tf.Module):
             # print(f'after discount mb_rewards is {mb_rewards}')
 
             if self.config.replay_buffer is not None:
-                self.replay_memory.add((mb_obs, mb_actions, mb_rewards, obs1, mb_masks))
+                self.replay_memory.add((mb_obs, mb_actions, mb_rewards, obs1, mb_masks, mb_fps))
 
             if t > self.config.learning_starts and t % self.config.train_freq == 0:
                 # Minimize the error in Bellman's equation on a batch sampled from replay buffer.
                 if self.config.prioritized_replay:
                     experience = self.replay_memory.sample(self.config.batch_size, beta=self.beta_schedule.value(t))
-                    (obses_t, actions, rewards, obses_tp1, dones, weights, batch_idxes) = experience
+                    (obses_t, actions, rewards, obses_tp1, dones, fps, weights, batch_idxes) = experience
                 else:
-                    obses_t, actions, rewards, obses_tp1, dones = self.replay_memory.sample(self.config.batch_size)
+                    obses_t, actions, rewards, obses_tp1, dones, fps = self.replay_memory.sample(self.config.batch_size)
                     weights, batch_idxes = np.ones_like(rewards), None
 
                 obses_t = tf.constant(obses_t)
                 actions = tf.constant(actions)
                 rewards = tf.constant(rewards)
                 weights = tf.constant(weights)
+                fps = tf.constant(fps)
 
-                loss, td_errors = self.train(obses_t, actions, rewards, weights)
+                loss, td_errors = self.train(obses_t, actions, rewards, weights, fps)
 
             if t > self.config.learning_starts and t % self.config.target_network_update_freq == 0:
                 # Update target network periodically.
@@ -408,7 +419,7 @@ class Agent(tf.Module):
             # print(np.asarray(test_obs_all).shape)
             while not test_done:
                 test_obs_all = tf.constant(test_obs_all)
-                test_action_list = self.choose_action(test_obs_all, stochastic=False)
+                test_action_list, _ = self.choose_action(test_obs_all, stochastic=False)
                 test_new_obs_list, test_rew_list, test_done, _ = test_env.step(test_action_list)
                 test_obs_all = test_new_obs_list
 

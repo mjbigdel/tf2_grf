@@ -1,6 +1,9 @@
+from distutils.command.config import config
+
 import tensorflow as tf
 from basic_dqn_FP.replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
 from common.schedules import LinearSchedule
+
 
 def init_replay_memory(config):
     """
@@ -28,14 +31,18 @@ def init_network(config):
         resnet style with conv_layers = [(16, 2), (32, 2), (32, 2), (32, 2)]
     :return: Tensorflow Model
     """
-    inputs_obs = tf.keras.layers.Input(shape=config.obs_shape)
-    inputs_agent_name_oh = tf.keras.layers.Input(shape=(1, config.num_agents))
     kernel_init = tf.keras.initializers.Orthogonal(gain=1.0)
     bias_init = tf.keras.initializers.Constant(0.0)
 
+    # inputs
+    inputs_obs = tf.keras.layers.Input(shape=config.obs_shape)
+    inputs_agent_name_oh = tf.keras.layers.Input(shape=(1, config.num_agents))
+    inputs_fps = tf.keras.layers.Input(shape=(config.num_agents-1, config.num_actions))
+    fps_flat = tf.keras.layers.Flatten()(inputs_fps)
+
     conv_layers = [(16, 2), (32, 2), (32, 2), (32, 2)]
     conv_out = inputs_obs
-    conv_out = tf.cast(conv_out, tf.float32) / 255.
+    # conv_out = tf.cast(conv_out, tf.float32) / 255.
     for i, (num_ch, num_blocks) in enumerate(conv_layers):
         conv_out = tf.keras.layers.Conv2D(filters=num_ch, kernel_size=3, strides=(1, 1), padding='same',
                                           name=f'conv2_{i}', kernel_initializer=kernel_init,
@@ -57,13 +64,16 @@ def init_network(config):
     conv_out = tf.keras.layers.Activation(tf.nn.relu)(conv_out)
     conv_out = tf.keras.layers.BatchNormalization()(conv_out)
     conv_out = tf.keras.layers.Flatten()(conv_out)
+    # conv_out = tf.keras.layers.Dense(units=512, activation=tf.keras.activations.relu,
+    #                                  kernel_initializer=kernel_init, bias_initializer=bias_init,
+    #                                  name='dense1')(conv_out)
+
     agent_name_oh_flatted = tf.keras.layers.Flatten()(inputs_agent_name_oh)
 
-    outputs = tf.keras.layers.concatenate([agent_name_oh_flatted, conv_out])
+    outputs = tf.keras.layers.concatenate([agent_name_oh_flatted, conv_out, fps_flat])
 
     outputs = tf.keras.layers.Dense(units=512, activation=tf.keras.activations.relu,
-                                           kernel_initializer=tf.keras.initializers.Orthogonal(1.0),
-                                           bias_initializer=tf.keras.initializers.Constant(0.0),
-                                           name='dense')(outputs)
+                                    kernel_initializer=kernel_init, bias_initializer=bias_init,
+                                    name='dense2')(outputs)
 
-    return tf.keras.Model(inputs=[inputs_obs, inputs_agent_name_oh], outputs=outputs, name=config.network)
+    return tf.keras.Model(inputs=[inputs_obs, inputs_agent_name_oh, inputs_fps], outputs=outputs, name=config.network)

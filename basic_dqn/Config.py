@@ -9,7 +9,7 @@ class Basic_DQN_Conf():
         self.render_train = False
         self.render_test = False
         self.stacked = True
-        self.env_name = 'academy_run_to_score'  # 'academy_3_vs_1_with_keeper'
+        self.env_name = 'academy_empty_goal_close'  # 'academy_3_vs_1_with_keeper'
         self.channel_dim = (51, 40)
         self.representationType = 'extracted'  # 'extracted': minimaps, 'pixels': raw pixels, 'simple115': vector of 115
         self.train_rewards = 'checkpoints,scoring'
