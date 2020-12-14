@@ -35,7 +35,7 @@ from absl import app
 # flags.mark_flag_as_required('trace_file')
 
 def main(_):
-    trace_file = '/home/mjbigdel/Downloads/episode_done_20201130-162745030580.dump'
+    trace_file = '/home/mjbigdel/Downloads/score_20201212-154828376334.dump'
     fps = 10
     # script_helpers.ScriptHelpers().replay(FLAGS.trace_file, FLAGS.fps)
     script_helpers.ScriptHelpers().replay(trace_file, fps)

@@ -22,7 +22,7 @@ class Agent(tf.Module):
 
         self.model = init_network(config)
         self.target_model = init_network(config)
-        self.target_model.trainable = False
+        # self.target_model.trainable = False
         self.model.summary()
         tf.keras.utils.plot_model(self.model, to_file='./model.png')
 
@@ -35,8 +35,8 @@ class Agent(tf.Module):
             self.agent_heads = self.build_agent_heads()
             self.target_agent_heads = self.build_agent_heads()
 
-        for target_agent_head in self.target_agent_heads:
-            target_agent_head.trainable = False
+        # for target_agent_head in self.target_agent_heads:
+        #     target_agent_head.trainable = False
 
         # Create the schedule for exploration starting from 1.
         self.exploration = LinearSchedule(schedule_timesteps=int(config.exploration_fraction * config.num_timesteps),
@@ -49,8 +49,8 @@ class Agent(tf.Module):
         self.eps = tf.Variable(0.0)
         self.one_hot_agents = tf.expand_dims(tf.one_hot(self.agent_ids, len(self.agent_ids), dtype=tf.float32), axis=1)
         print(f'self.onehot_agent.shape is {self.one_hot_agents.shape}')
-        self.dummy_fps = np.ones((1, self.config.num_agents - 1, self.config.num_actions))
-
+        self.dummy_fps = tf.zeros((1, (self.config.num_agents - 1) * self.config.num_actions + self.config.num_extra_data))
+        print(f'self.dummy_fps.shape is {self.dummy_fps.shape}')
 
     def build_agent_heads(self):
         """
@@ -92,7 +92,7 @@ class Agent(tf.Module):
                                                name='action_' + name)(inputs)
 
             with tf.name_scope(f'state_value_{name}'):
-                state_head_a = tf.keras.layers.Dense(units=self.config.num_actions, activation=None,
+                state_head_a = tf.keras.layers.Dense(units=1, activation=None,
                                                kernel_initializer=tf.keras.initializers.Orthogonal(1.0),
                                                bias_initializer=tf.keras.initializers.Constant(0.0),
                                                name='state_' + name)(inputs)
@@ -119,11 +119,11 @@ class Agent(tf.Module):
         actions = []
         fps = []
         for a in self.agent_ids:
-            inputs = {0: np.expand_dims(obs[a], 0), 1: self.one_hot_agents[a], 2: self.dummy_fps}
+            inputs = {0: tf.expand_dims(obs[a], 0), 1: self.one_hot_agents[a], 2: self.dummy_fps}
             fc_values = self.model(inputs)
             # print(f'fc_values.shape {fc_values.shape}')
             q_values = self.agent_heads[a](fc_values)
-            fps.append(q_values.numpy()[0])
+            fps.append(q_values.numpy().tolist()[0])
             # print(f'q_values.shape {q_values.shape}')
             deterministic_actions = tf.argmax(q_values, axis=1)
             # print(f'deterministic_actions {deterministic_actions}')
@@ -161,7 +161,7 @@ class Agent(tf.Module):
         values = []
 
         # for a in self.agent_ids:
-        #     inputs = {0: np.expand_dims(obs[a], 0), 1: self.one_hot_agents[a]}
+        #     inputs = {0: tf.expand_dims(obs[a], 0), 1: self.one_hot_agents[a]}
         #     fc_values = self.model(inputs)
         #     q_values = self.agent_heads[a](fc_values)
         #     q_tp1_best = tf.reduce_max(q_values, 1)
@@ -169,7 +169,7 @@ class Agent(tf.Module):
 
 
         for a in self.agent_ids:
-            inputs = {0: np.expand_dims(obs[a], 0), 1: self.one_hot_agents[a], 2: self.dummy_fps}
+            inputs = {0: tf.expand_dims(obs[a], 0), 1: self.one_hot_agents[a], 2: self.dummy_fps}
             fc_values = self.target_model(inputs)
             q_values = self.target_agent_heads[a](fc_values)
 
@@ -232,7 +232,7 @@ class Agent(tf.Module):
             sum_loss = tf.reduce_sum(loss)
             sum_td_error = tf.reduce_sum(td_error)
 
-        print(f'sum_loss is {sum_loss}, loss is {loss}')
+        # print(f'sum_loss is {sum_loss}, loss is {loss}')
         param = self.model.trainable_variables
         for a in self.agent_ids:
             param += self.agent_heads[a].trainable_variables
@@ -257,18 +257,18 @@ class Agent(tf.Module):
         for var, var_target in zip(self.model.trainable_variables, self.target_model.trainable_variables):
             var_target.assign(var)
 
-        vars, target_vars = [], []
+        vars_, target_vars = [], []
         for a in self.agent_ids:
-            vars.extend(self.agent_heads[a].trainable_variables)
+            vars_.extend(self.agent_heads[a].trainable_variables)
             target_vars.extend(self.target_agent_heads[a].trainable_variables)
 
-        for var, var_target in zip(vars, target_vars):
+        for var, var_target in zip(vars_, target_vars):
             var_target.assign(var)
 
     @tf.function(autograph=False)
     def soft_update_target(self):
         for var, var_target in zip(self.model.trainable_variables, self.target_model.trainable_variables):
-            var_target.assign(self.tau * var + (1.0 - self.tau) * var_target)
+            var_target.assign(self.config.tau * var + (1.0 - self.config.tau) * var_target)
 
         vars, target_vars = [], []
         for a in self.agent_ids:
@@ -276,7 +276,7 @@ class Agent(tf.Module):
             target_vars.extend(self.target_agent_heads[a].trainable_variables)
 
         for var, var_target in zip(vars, target_vars):
-            var_target.assign(self.tau * var + (1.0 - self.tau) * var_target)
+            var_target.assign(self.config.tau * var + (1.0 - self.config.tau) * var_target)
 
     def save(self, save_path):
         self.model.save_weights(f'{save_path}/value_network.h5')
@@ -294,6 +294,7 @@ class Agent(tf.Module):
 
 
     def learn(self):
+        self.soft_update_target()
         episode_rewards = [0.0]
         saved_mean_reward = None
         obs = self.env.reset()
@@ -303,22 +304,33 @@ class Agent(tf.Module):
         for t in range(self.config.num_timesteps):
             update_eps = tf.constant(self.exploration.value(t))
 
-            if t % self.config.print_freq == 0:
+            if t % (self.config.print_freq*10) == 0:
                 time_1000_step = time.time()
                 nseconds = time_1000_step - tstart
                 tstart = time_1000_step
-                print(f'time spend to perform {t - self.config.print_freq} to {t} steps is {nseconds} ')
+                print(f'time spend to perform {t - self.config.print_freq*10} to {t} steps is {nseconds} ')
                 print('eps update', self.exploration.value(t))
 
             mb_obs, mb_rewards, mb_actions, mb_fps, mb_dones = [], [], [], [], []
             # mb_states = states
             epinfos = []
-            for _ in range(self.config.n_steps):
+            for nstep in range(self.config.n_steps):
                 actions, fps_ = self.choose_action(tf.constant(obs), update_eps=update_eps)
                 # print(f'actions is {actions}')
+                # print(f'fps_ is {fps_}')
                 fps = []
-                for a in self.agent_ids:
-                    fps.append(fps_[:a] + fps_[a + 1:])
+                if self.config.num_agents > 1 :
+                    for a in self.agent_ids:
+                        fp = fps_[:a]
+                        fp.extend(fps_[a + 1:])
+                        # print(f'fp is {fp}')
+                        fp_a = np.concatenate((fp, [[self.exploration.value(t)*100, t]]), axis=None)
+                        # fp_a.extend([self.exploration.value(t)*100, t, nstep, a])
+                        # print(f'fp_a is {fp_a}')
+
+                        fps.append(fp_a) 
+                
+                # print(f'fps is {fps}')
 
                 mb_obs.append(obs.copy())
                 mb_actions.append(actions)
@@ -389,12 +401,17 @@ class Agent(tf.Module):
                 fps = tf.constant(fps)
 
                 loss, td_errors = self.train(obses_t, actions, rewards, weights, fps)
+            
+                if  t % (self.config.train_freq*50) == 0:
+                    print(f't = {t} , loss = {loss}')
+                
 
             if t > self.config.learning_starts and t % self.config.target_network_update_freq == 0:
                 # Update target network periodically.
                 self.soft_update_target()
 
             if t % self.config.playing_test == 0 and t != 0:
+                # self.save(self.config.save_path)
                 self.play_test_games()
 
             mean_100ep_reward = np.mean(episode_rewards[-101:-1])
