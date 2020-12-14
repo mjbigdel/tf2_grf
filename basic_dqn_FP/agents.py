@@ -17,12 +17,10 @@ class Agent(tf.Module):
         self.agent_ids = [a for a in range(config.num_agents)]
         self.env = env
         self.optimizer = tf.keras.optimizers.Adam(self.config.lr)
-
         self.replay_memory, self.beta_schedule = init_replay_memory(config)
 
         self.model = init_network(config)
         self.target_model = init_network(config)
-        # self.target_model.trainable = False
         self.model.summary()
         tf.keras.utils.plot_model(self.model, to_file='./model.png')
 
@@ -34,9 +32,6 @@ class Agent(tf.Module):
         else:
             self.agent_heads = self.build_agent_heads()
             self.target_agent_heads = self.build_agent_heads()
-
-        # for target_agent_head in self.target_agent_heads:
-        #     target_agent_head.trainable = False
 
         # Create the schedule for exploration starting from 1.
         self.exploration = LinearSchedule(schedule_timesteps=int(config.exploration_fraction * config.num_timesteps),
@@ -159,15 +154,6 @@ class Agent(tf.Module):
         """
 
         values = []
-
-        # for a in self.agent_ids:
-        #     inputs = {0: tf.expand_dims(obs[a], 0), 1: self.one_hot_agents[a]}
-        #     fc_values = self.model(inputs)
-        #     q_values = self.agent_heads[a](fc_values)
-        #     q_tp1_best = tf.reduce_max(q_values, 1)
-        #     values.append(q_tp1_best.numpy()[0])
-
-
         for a in self.agent_ids:
             inputs = {0: tf.expand_dims(obs[a], 0), 1: self.one_hot_agents[a], 2: self.dummy_fps}
             fc_values = self.target_model(inputs)
@@ -319,7 +305,7 @@ class Agent(tf.Module):
                 # print(f'actions is {actions}')
                 # print(f'fps_ is {fps_}')
                 fps = []
-                if self.config.num_agents > 1 :
+                if self.config.num_agents > 1:
                     for a in self.agent_ids:
                         fp = fps_[:a]
                         fp.extend(fps_[a + 1:])
