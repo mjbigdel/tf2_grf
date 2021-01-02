@@ -46,6 +46,7 @@ class Basic_DQN_FP_Conf():
         self.lr = 0.000011
         self.dueling = True
         self.double_q = True
+        self.add_fps = False
         self.num_extra_data = 2
         self.fp_shape = 0
         self.target_network_update_freq = 10
@@ -64,10 +65,11 @@ def train():
 
     # init env
     env = init_env(config, 'train')
-
     config.num_actions = env.action_space.n
     config.obs_shape = env.observation_space.shape
-    config.fp_shape = (config.num_agents - 1) * config.num_actions + config.num_extra_data
+    if config.num_agents > 1:
+        config.add_fps = True
+        config.fp_shape = (config.num_agents - 1) * config.num_actions + config.num_extra_data
 
     agent = init_agent(config, env)
     agent.learn()

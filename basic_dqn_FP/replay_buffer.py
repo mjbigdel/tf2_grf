@@ -23,29 +23,53 @@ class ReplayBuffer(object):
     def __len__(self):
         return len(self._storage)
 
-    def add(self, experience):
+    # def add(self, experience):
+    #     if self._next_idx >= len(self._storage):
+    #         self._storage.append(experience)
+    #     else:
+    #         self._storage[self._next_idx] = experience
+    #     self._next_idx = (self._next_idx + 1) % self._maxsize
+    #
+    # def _encode_sample(self, idxes):
+    #     obses_t, actions, rewards, obses_tp1, dones, fps = [], [], [], [], [], []
+    #     for i in idxes:
+    #         experience = self._storage[i]
+    #         obs_t, action, reward, obs_tp1, done, fp = experience
+    #         obses_t.append(obs_t)
+    #         actions.append(action)
+    #         rewards.append(reward)
+    #         obses_tp1.append(obs_tp1)
+    #         dones.append(done)
+    #         fps.append(fp)
+    #     return np.array(obses_t, copy=False), np.array(actions, copy=False),\
+    #            np.array(rewards, copy=False), np.array(obses_tp1, copy=False),\
+    #            np.array(dones, copy=False), np.array(fps, copy=False)
+
+    def add(self, obs_t, action, reward, obs_tp1, done, fp):
+        data = (obs_t, action, reward, obs_tp1, done, fp)
         if self._next_idx >= len(self._storage):
-            self._storage.append(experience)
+            self._storage.append(data)
         else:
-            self._storage[self._next_idx] = experience
+            self._storage[self._next_idx] = data
         self._next_idx = (self._next_idx + 1) % self._maxsize
 
     def _encode_sample(self, idxes):
-        obses_t, actions, rewards, obses_tp1, dones, fps = [], [], [], [], [], []
+        obses_t, actions, rewards, values, dones, fps = [], [], [], [], [], []
+        data = self._storage[0]
+        ob_dtype = data[0][0].dtype
+        ac_dtype = data[1][0].dtype
         for i in idxes:
-            experience = self._storage[i]
-            obs_t, action, reward, obs_tp1, done, fp = experience
-            obses_t.append(obs_t)
-            actions.append(action)
+            data = self._storage[i]
+            obs_t, action, reward, value, done, fp = data
+            obses_t.append(np.array(obs_t, copy=False))
+            actions.append(np.array(action, copy=False))
             rewards.append(reward)
-            obses_tp1.append(obs_tp1)
+            values.append(value)
             dones.append(done)
-            fps.append(fp)
-        return np.array(obses_t, copy=False), np.array(actions, copy=False),\
-               np.array(rewards, copy=False), np.array(obses_tp1, copy=False),\
-               np.array(dones, copy=False), np.array(fps, copy=False)
-
-
+            fps.append(np.array(fp, copy=False))
+        return np.array(obses_t, dtype=ob_dtype), np.array(actions, dtype=ac_dtype),\
+               np.array(rewards, dtype=np.float32), np.array(values, dtype=np.float32),\
+               np.array(dones, dtype=np.float32), np.array(fps, dtype=np.float32),
 
     def sample(self, batch_size):
         """Sample a batch of experiences.
