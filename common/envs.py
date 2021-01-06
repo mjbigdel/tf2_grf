@@ -19,6 +19,8 @@ import gym
 from gym.envs.registration import register
 import gym_minigrid
 from gym_minigrid.wrappers import *
+from common.atari_wrappers import make_atari, wrap_deepmind, Monitor
+from common import logger
 
 import numpy as np
 
@@ -264,8 +266,6 @@ class MiniGrid():
         def __init__(self, id):
             self.id = id
 
-from common.atari_wrappers import make_atari, wrap_deepmind, Monitor
-from common import logger
 
 class GymEnvs():
     """An example of a wrapper for GFootball to make it compatible with rllib."""

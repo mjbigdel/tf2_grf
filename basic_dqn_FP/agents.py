@@ -3,7 +3,6 @@ import tensorflow as tf
 import numpy as np
 import time
 
-from setuptools._distutils.command.config import config
 
 from common.schedules import LinearSchedule
 from common import logger

@@ -40,15 +40,15 @@ def init_env(config, mode='train'):
 
     if config.environment_type == 'multigrid':
         from common.envs import MultiGrid
-        return MultiGrid(config).env
+        return MultiGrid(config)
 
     if config.environment_type == 'minigrid':
         from common.envs import MiniGrid
-        return MiniGrid(config).env
+        return MiniGrid(config)
 
     if config.environment_type == 'gym':
         from common.envs import GymEnvs
-        return GymEnvs(config).env
+        return GymEnvs(config)
 
 
 @tf.function

@@ -34,9 +34,9 @@ class Learn(tf.Module):
 
     def _init_networks(self):
         network = Network(self.config, self.agent_ids)
-        base_model = network.init_base_model()
-        target_base_model = network.init_base_model()
-        return network.build_model(base_model), network.build_model(target_base_model)
+        # base_model = network.init_base_model()
+        # target_base_model = network.init_base_model()
+        return network.build_models(), network.build_models()
 
     def get_agent_ids(self):
         return [agent_id for agent_id in range(self.config.num_agents)]
@@ -163,6 +163,7 @@ class Learn(tf.Module):
     def learn(self):
         episode_rewards = [0.0]
         obs = self.env.reset()
+        print(obs.shape)
 
         done = False
         tstart = time.time()
@@ -210,6 +211,7 @@ class Learn(tf.Module):
             mb_dones = np.asarray(mb_dones, dtype=np.bool).swapaxes(0, 1)
             mb_masks = mb_dones[:, :-1]
             mb_dones = mb_dones[:, 1:]
+
 
             # print(f' before discount mb_rewards is {mb_rewards}')
 

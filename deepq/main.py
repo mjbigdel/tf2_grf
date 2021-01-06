@@ -57,6 +57,8 @@ class Config(object):
         self.num_tests = 10
         self.playing_test = 50000
 
+        self.fc1_dims = 512
+
 
 # main
 # if __name__ == 'main':
