@@ -1,2 +1,5 @@
 .dump
 *.dump
+*.pyc
+*.h5
+*.avi
