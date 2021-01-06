@@ -8,12 +8,6 @@ def create_ma_env(num_agents, render, stacked, env_name, representationType, cha
     from common.multi_agent_gfootball import RllibGFootball
     return RllibGFootball(num_agents, render, stacked, env_name, representationType, channel_dim, rewards, data_path)
 
-
-def create_env(num_agents, render, stacked, env_name, representationType, channel_dim, rewards):
-    from common.multi_agent_gfootball import SingleAgent
-    return SingleAgent(num_agents, render, stacked, env_name, representationType, channel_dim, rewards)
-
-
 def init_env(config, mode='train'):
     data_path = config.data_path
     num_agents = config.num_agents

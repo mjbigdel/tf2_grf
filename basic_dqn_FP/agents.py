@@ -32,8 +32,6 @@ class Agent(tf.Module):
         # init model
         self.network = Network(config)
 
-
-
     @tf.function
     def choose_action(self, obs, stochastic=True, update_eps=-1):
         """
@@ -124,15 +122,6 @@ class Agent(tf.Module):
 
         return sum_loss.numpy(), sum_td_error.numpy()
 
-    def create_fps(self, fps_, t):
-        fps = []
-        if self.config.num_agents > 1:
-            for a in self.agent_ids:
-                fp = fps_[:a]
-                fp.extend(fps_[a + 1:])
-                fp_a = np.concatenate((fp, [[self.exploration.value(t) * 100, t]]), axis=None)
-                fps.append(fp_a)
-        return fps
 
     def learn(self):
         self.network.soft_update_target()
@@ -153,14 +142,23 @@ class Agent(tf.Module):
             # mb_states = states
             epinfos = []
             for nstep in range(self.config.n_steps):
-                actions, fps = self.choose_action(tf.constant(obs), update_eps=update_eps)
-                fps = self.create_fps(fps, t)
+                actions, fps_ = self.choose_action(tf.constant(obs), update_eps=update_eps)
+                fps = []
+                if self.config.num_agents > 1:
+                    for a in self.agent_ids:
+                        fp = fps_[:a]
+                        fp.extend(fps_[a + 1:])
+                        fp_a = np.concatenate((fp, [[self.exploration.value(t)*100, t]]), axis=None)
+                        fps.append(fp_a)
+
+                # print(f'fps.shape {np.array(fps).shape}')
                 mb_obs.append(obs.copy())
                 mb_actions.append(actions)
                 mb_fps.append(fps)
                 mb_dones.append([float(done) for _ in self.agent_ids])
 
                 obs1, rews, done, info = self.env.step(actions.tolist())
+
                 if self.config.same_reward_for_agents:
                     rews = [np.max(rews) for _ in range(len(rews))]  # for cooperative purpose same reward for every one
 
@@ -192,6 +190,7 @@ class Agent(tf.Module):
             if self.config.gamma > 0.0:
                 # Discount/bootstrap off value fn
                 last_values = self.network.last_value(tf.constant(obs1))
+                # print(f'last_values {last_values}')
                 for n, (rewards, dones, value) in enumerate(zip(mb_rewards, mb_dones, last_values)):
                     rewards = rewards.tolist()
                     dones = dones.tolist()
@@ -304,19 +303,15 @@ class Agent(tf.Module):
 def discount_with_dones(rewards, dones, gamma):
     discounted = []
     r = 0
-    print(rewards[::-1])
-    print(dones[::-1])
     for reward, done in zip(rewards[::-1], dones[::-1]):
         r = reward + gamma * r * (1. - done)  # fixed off by one bug
         discounted.append(r)
-
-    print(discounted)
     return discounted[::-1]
 
-rewards = [0., 0., 0., 0., 0., 0.5, 0., 0.]
-dones = [0, 0, 0, 0, 0, 0, 0, 0]
-gamma = .99
-dis_rews = discount_with_dones(rewards, dones, gamma)
-print(dis_rews)
+# rewards = [0., 0., 0., 0., 0., 0.5, 0., 0.]
+# dones = [0, 0, 0, 0, 0, 0, 0, 0]
+# gamma = .5
+# dis_rews = discount_with_dones(rewards,dones,gamma)
+# print(dis_rews)
 
 

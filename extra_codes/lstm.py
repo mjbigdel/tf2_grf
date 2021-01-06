@@ -212,3 +212,74 @@
 #
 #
 #
+
+import numpy as np
+import tensorflow as tf
+tf.config.run_functions_eagerly(True)
+
+# inputs_obs = tf.keras.layers.Input((4))
+# outputs = tf.keras.layers.Dense(16)(inputs_obs)
+# base_model = tf.keras.Model(inputs=inputs_obs, outputs=outputs)
+#
+#
+# inputs_head_shape = base_model.output_shape[1:]
+# print(inputs_head_shape)
+# inputs_head = tf.keras.layers.Input((inputs_head_shape))
+# outputs_a = tf.keras.layers.Dense(8)(inputs_head)
+# model = tf.keras.Model(inputs=inputs_head, outputs=outputs_a)
+#
+# print(model.trainable_variables)
+
+
+def init_base_network():
+    inputs = tf.keras.layers.Input((4), name='Input_obs')
+    outputs = tf.keras.layers.Dense(8, name='h1_dense')(inputs)
+    return tf.keras.Model(inputs=inputs, outputs=outputs)
+
+base_model = init_base_network()
+print(base_model)
+
+def build_network_head():
+    heads = []
+    for agent in range(3):
+        outputs_a = tf.keras.layers.Dense(4, name=f'q_values_{agent}')(base_model.layers[-1].output)
+        heads.append(tf.keras.Model(inputs=base_model.inputs, outputs=outputs_a))
+        heads[agent].summary()
+    return heads
+
+
+heads = build_network_head()
+
+@tf.function
+def compute_loss_a(agent):
+    actions = [0, 1, 2, 3]
+    obses = np.random.normal(0., 1., (3, 4, 4))
+    rewards = [2., 3., 5., 1.]
+    q_vals = heads[agent](obses[agent])
+    one_hot = tf.one_hot(actions, 4)
+    # print(one_hot)
+    q_t_selected = tf.reduce_sum(q_vals * one_hot, 1)
+    target_q_values = heads[agent](obses[agent] + np.random.normal(0., 1., obses[agent].shape))
+    max_target_q_values = rewards + tf.reduce_max(target_q_values, axis=1)
+    errors = q_t_selected - max_target_q_values
+    return errors
+
+
+@tf.function
+def compute_loss():
+    loss = []
+    with tf.GradientTape() as tape:
+        for agent in range(3):
+            errors = compute_loss_a(agent)
+            loss.append(tf.reduce_mean(errors))
+
+        loss_all = tf.reduce_sum(loss)
+
+    print(loss_all)
+    param = tape.watched_variables()
+    print(f'params: \n {param}')
+
+
+
+
+compute_loss()
