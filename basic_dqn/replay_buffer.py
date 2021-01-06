@@ -1,6 +1,5 @@
 
 import random
-
 import numpy as np
 
 from common.segment_tree import SumSegmentTree, MinSegmentTree
@@ -42,8 +41,6 @@ class ReplayBuffer(object):
             dones.append(done)
         return np.array(obses_t, copy=False), np.array(actions, copy=False),\
                np.array(rewards, copy=False), np.array(obses_tp1, copy=False), np.array(dones, copy=False)
-
-
 
     def sample(self, batch_size):
         """Sample a batch of experiences.

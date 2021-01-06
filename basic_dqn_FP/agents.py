@@ -32,8 +32,6 @@ class Agent(tf.Module):
         # init model
         self.network = Network(config)
 
-
-
     @tf.function
     def choose_action(self, obs, stochastic=True, update_eps=-1):
         """
@@ -310,10 +308,10 @@ def discount_with_dones(rewards, dones, gamma):
         discounted.append(r)
     return discounted[::-1]
 
-rewards = [0., 0., 0., 0., 0., 0.5, 0., 0.]
-dones = [0, 0, 0, 0, 0, 0, 0, 0]
-gamma = .5
-dis_rews = discount_with_dones(rewards,dones,gamma)
-print(dis_rews)
+# rewards = [0., 0., 0., 0., 0., 0.5, 0., 0.]
+# dones = [0, 0, 0, 0, 0, 0, 0, 0]
+# gamma = .5
+# dis_rews = discount_with_dones(rewards,dones,gamma)
+# print(dis_rews)
 
 

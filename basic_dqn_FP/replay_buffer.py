@@ -45,8 +45,6 @@ class ReplayBuffer(object):
                np.array(rewards, copy=False), np.array(obses_tp1, copy=False),\
                np.array(dones, copy=False), np.array(fps, copy=False)
 
-
-
     def sample(self, batch_size):
         """Sample a batch of experiences.
 

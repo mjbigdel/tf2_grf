@@ -1,6 +1,7 @@
 
 import tensorflow as tf
 from basic_dqn_FP.utils import init_cnn, init_tdcnn_rnn
+
 def init_network(config):
     if config.network == 'cnn':
         network = init_cnn(config)
@@ -107,7 +108,7 @@ class Network(tf.Module):
         """
 
         :param obs: list observations one for each agent
-        :return: actions: list of actions and fingerperintschosen by agents based on observation one for each agent
+        :return: actions: list of actions and fingerperints chosen by agents based on observation one for each agent
         """
 
         actions = []
