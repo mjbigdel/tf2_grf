@@ -5,7 +5,7 @@ import scipy.signal
 
 
 def create_ma_env(num_agents, render, stacked, env_name, representationType, channel_dim, rewards, data_path):
-    from common.multi_agent_gfootball import RllibGFootball
+    from common.envs import RllibGFootball
     return RllibGFootball(num_agents, render, stacked, env_name, representationType, channel_dim, rewards, data_path)
 
 def init_env(config, mode='train'):

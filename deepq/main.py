@@ -7,8 +7,9 @@ from deepq.learn import Learn
 
 class Config(object):
     def __init__(self):
+        self.environment_type = 'gym'  # gym, GFootball, multigrid, minigrid
+        self.env_name = 'BreakoutNoFrameskip-v4'  # 'academy_3_vs_1_with_keeper'  academy_empty_goal
         self.num_agents = 1
-        self.environment_type = 'minigrid'  # gym, GFootball, multigrid, minigrid
         self.max_episodes_length = 300
         self.data_path = './plays/'
         self.stacked = False
@@ -16,7 +17,6 @@ class Config(object):
         # GFootbal Configs
         self.render_train = False
         self.render_test = False
-        self.env_name = 'academy_empty_goal_close'  # 'academy_3_vs_1_with_keeper'  academy_empty_goal
         self.channel_dim = (96 // 2, 72 // 2)
         self.representationType = 'extracted'  # 'extracted': minimaps, 'pixels': raw pixels, 'simple115': vector of 115
         self.train_rewards = 'checkpoints,scoring'

@@ -13,7 +13,7 @@ def discount_with_dones(rewards, dones, gamma):
 
 
 def create_ma_env(num_agents, render, stacked, env_name, representationType, channel_dim, rewards, data_path):
-    from common.multi_agent_gfootball import RllibGFootball
+    from common.envs import RllibGFootball
     return RllibGFootball(num_agents, render, stacked, env_name, representationType, channel_dim, rewards, data_path)
 
 
@@ -39,17 +39,16 @@ def init_env(config, mode='train'):
                              channel_dim, rewards, data_path)
 
     if config.environment_type == 'multigrid':
-        from common.multi_agent_gfootball import MultiGrid
-        from common.multi_agent_gfootball import MultiGrid
-        return MultiGrid('soccer')
+        from common.envs import MultiGrid
+        return MultiGrid(config).env
 
     if config.environment_type == 'minigrid':
-        from common.multi_agent_gfootball import MiniGrid
-        return MiniGrid('MiniGrid-Empty-5x5-v0')
+        from common.envs import MiniGrid
+        return MiniGrid(config).env
 
     if config.environment_type == 'gym':
-        NotImplementedError
-        # Todo
+        from common.envs import GymEnvs
+        return GymEnvs(config).env
 
 
 @tf.function

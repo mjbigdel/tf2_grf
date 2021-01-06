@@ -115,20 +115,16 @@ class RllibGFootball():
             self.id = id
 
 
-
-
-
 class MultiGrid():
     """An example of a wrapper for GFootball to make it compatible with rllib."""
     _counter = 0
 
-    def __init__(self, env_name, **kwargs):
+    def __init__(self, config, **kwargs):
         self.id = MultiGrid._counter
         MultiGrid._counter += 1
+        self.config = config
 
-        # self.num_agents = num_agents
-
-        if env_name == 'soccer':
+        if self.config.env_name == 'soccer':
             register(
                 id='multigrid-soccer-v0',
                 entry_point='gym_multigrid.envs:SoccerGame4HEnv10x15N2',
@@ -142,7 +138,7 @@ class MultiGrid():
             )
             self.env = gym.make('multigrid-collect-v0')
 
-        self.num_agents = len(self.env.agents)
+        self.config.num_agents = len(self.env.agents)
 
         self.reset = self.reset_list
         self.step = self.step_list
@@ -157,7 +153,7 @@ class MultiGrid():
         print('self.action_space = ', self.action_space)
 
     def agent_ids(self):
-        return [i for i in range(self.num_agents)]
+        return [i for i in range(self.config.num_agents)]
 
     def reset_list(self):
         """
@@ -165,7 +161,7 @@ class MultiGrid():
             obs as a list for each agent
         """
         original_obs = self.env.reset()
-        if self.num_agents > 1:
+        if self.config.num_agents > 1:
             return np.array(original_obs, copy=False)
         else:
             return np.expand_dims(np.array(original_obs, copy=False), 0)  # adds dimension to support single agent case
@@ -179,7 +175,7 @@ class MultiGrid():
         """
 
         obs, reward, done, info = self.env.step(action_list)
-        if self.num_agents > 1:
+        if self.config.num_agents > 1:
             return obs, reward, done, info
         else:
             return np.expand_dims(np.array(obs, copy=False), 0), np.expand_dims(reward, 0), done, info
@@ -203,28 +199,16 @@ class MiniGrid():
     """An example of a wrapper for GFootball to make it compatible with rllib."""
     _counter = 0
 
-    def __init__(self, env_name, **kwargs):
+    def __init__(self, config, **kwargs):
         self.id = MiniGrid._counter
         MiniGrid._counter += 1
+        self.config = config
 
-        # if env_name == 'soccer':
-        #     register(
-        #         id='multigrid-soccer-v0',
-        #         entry_point='gym_multigrid.envs:SoccerGame4HEnv10x15N2',
-        #     )
-        self.env = gym.make(env_name)
+        self.env = gym.make(self.config.env_name)
         # self.env = RGBImgPartialObsWrapper(self.env)  # Get pixel observations
         self.env = ImgObsWrapper(self.env)  # Get rid of the 'mission' field
-        # self.env =
 
-        # else:
-        #     register(
-        #         id='multigrid-collect-v0',
-        #         entry_point='gym_multigrid.envs:CollectGame4HEnv10x10N2',
-        #     )
-        #     self.env = gym.make('multigrid-collect-v0')
-
-        self.num_agents = 1
+        self.config.num_agents = 1
 
         self.reset = self.reset_list
         self.step = self.step_list
@@ -239,7 +223,7 @@ class MiniGrid():
         print('self.action_space = ', self.action_space)
 
     def agent_ids(self):
-        return [i for i in range(self.num_agents)]
+        return [i for i in range(self.config.num_agents)]
 
     def reset_list(self):
         """
@@ -247,7 +231,7 @@ class MiniGrid():
             obs as a list for each agent
         """
         original_obs = self.env.reset()
-        if self.num_agents > 1:
+        if self.config.num_agents > 1:
             return np.array(original_obs, copy=False)
         else:
             return np.expand_dims(np.array(original_obs, copy=False), 0)  # adds dimension to support single agent case
@@ -261,7 +245,7 @@ class MiniGrid():
         """
 
         obs, reward, done, info = self.env.step(action_list)
-        if self.num_agents > 1:
+        if self.config.num_agents > 1:
             return obs, reward, done, info
         else:
             return np.expand_dims(np.array(obs, copy=False), 0), np.expand_dims(reward, 0), done, info
@@ -279,6 +263,87 @@ class MiniGrid():
     class Spec:
         def __init__(self, id):
             self.id = id
+
+from common.atari_wrappers import make_atari, wrap_deepmind, Monitor
+from common import logger
+
+class GymEnvs():
+    """An example of a wrapper for GFootball to make it compatible with rllib."""
+    _counter = 0
+
+    def __init__(self, config, **kwargs):
+
+        self.id = GymEnvs._counter
+        GymEnvs._counter += 1
+        self.config = config
+
+        self.env = self.make_env(rank=0)
+        self.config.num_agents = 1
+
+        self.reset = self.reset_list
+        self.step = self.step_list
+        self.sample = self.sample_list
+
+        self.spec = self.Spec(self.id)
+
+        self.action_space = self.env.action_space
+        self.observation_space = self.env.observation_space
+
+        print('self.observation_space = ', self.observation_space)
+        print('self.action_space = ', self.action_space)
+
+    def make_env(self, rank):
+        env = make_atari(self.config.env_name)
+        env.seed(self.config.seed + rank)
+        gym.logger.setLevel(logger.WARN)
+        env = wrap_deepmind(env)
+
+        # wrap the env one more time for getting total reward
+        env = Monitor(env, rank)
+        return env
+
+    def agent_ids(self):
+        return [i for i in range(self.config.num_agents)]
+
+    def reset_list(self):
+        """
+        :return:
+            obs as a list for each agent
+        """
+        original_obs = self.env.reset()
+        if self.config.num_agents > 1:
+            return np.array(original_obs, copy=False)
+        else:
+            return np.expand_dims(np.array(original_obs, copy=False), 0)  # adds dimension to support single agent case
+
+    def step_list(self, action_list):
+        """
+        :return:
+            obs as a list for each agent
+            reward as a list for each agent,
+            done as a True/False value, info
+        """
+
+        obs, reward, done, info = self.env.step(action_list)
+        if self.config.num_agents > 1:
+            return obs, reward, done, info
+        else:
+            return np.expand_dims(np.array(obs, copy=False), 0), np.expand_dims(reward, 0), done, info
+
+    def close(self):
+        self.env.close()
+
+    def sample_list(self):
+        """
+
+        :return: list contain action for each agent
+        """
+        return self.env.action_space.sample()
+
+    class Spec:
+        def __init__(self, id):
+            self.id = id
+
 
 
 # data_path = './rllib_test/DQN/'

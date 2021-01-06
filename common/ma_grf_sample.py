@@ -7,7 +7,7 @@ import argparse
 import ray
 from ray.tune.registry import register_env
 
-from multi_agent_gfootball import RllibGFootball
+from envs import RllibGFootball
 from simple_dqn import Agent
 from utils import plotLearning
 
