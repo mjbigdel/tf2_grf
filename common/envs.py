@@ -127,17 +127,9 @@ class MultiGrid():
         self.config = config
 
         if self.config.env_name == 'soccer':
-            register(
-                id='multigrid-soccer-v0',
-                entry_point='gym_multigrid.envs:SoccerGame4HEnv10x15N2',
-            )
             self.env = gym.make('multigrid-soccer-v0')
 
         else:
-            register(
-                id='multigrid-collect-v0',
-                entry_point='gym_multigrid.envs:CollectGame4HEnv10x10N2',
-            )
             self.env = gym.make('multigrid-collect-v0')
 
         self.config.num_agents = len(self.env.agents)
@@ -343,8 +335,6 @@ class GymEnvs():
     class Spec:
         def __init__(self, id):
             self.id = id
-
-
 
 # data_path = './rllib_test/DQN/'
 # single_agent = True

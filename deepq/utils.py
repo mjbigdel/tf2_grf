@@ -78,5 +78,15 @@ def set_global_seeds(i):
     random.seed(myseed)
 
 
+def register_multi_grid_env(env_name):
+    from gym.envs.registration import register
+    if env_name == 'soccer':
+        id = 'multigrid-soccer-v0'
+        register(id=id, entry_point='gym_multigrid.envs:SoccerGame4HEnv10x15N2')
+    else:
+        id = 'multigrid-collect-v0'
+        register(id=id, entry_point='gym_multigrid.envs:CollectGame4HEnv10x10N2')
+
+
 
 

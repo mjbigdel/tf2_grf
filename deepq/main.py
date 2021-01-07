@@ -1,16 +1,20 @@
 import tensorflow as tf
 # physical_devices = tf.config.list_physical_devices('GPU')
 # tf.config.experimental.set_memory_growth(physical_devices[0], True)
-from deepq.utils import init_env, set_global_seeds
+from deepq.utils import init_env, set_global_seeds, register_multi_grid_env
 from deepq.learn import Learn
 
 
 class Config(object):
     def __init__(self):
-        self.environment_type = 'gym'  # gym, GFootball, multigrid, minigrid
-        self.env_name = 'BreakoutNoFrameskip-v4'  # 'academy_3_vs_1_with_keeper'  academy_empty_goal
+        # gym -> 'BreakoutNoFrameskip-v4', ...
+        # GFootball -> 'academy_3_vs_1_with_keeper'  'academy_empty_goal', ...
+        # multigrid -> 'soccer', ...
+        # minigrid -> 'MiniGrid-Empty-5x5-v0', ...
+        self.environment_type = 'multigrid'  # gym, GFootball, multigrid, minigrid
+        self.env_name = 'soccer'  #
         self.num_agents = 1
-        self.max_episodes_length = 300
+        self.max_episodes_length = 1000
         self.data_path = './plays/'
         self.stacked = False
 
@@ -23,7 +27,7 @@ class Config(object):
         self.test_rewards = 'scoring'
 
         # Network Configs
-        self.network = 'cnn'
+        self.network = 'mlp'
         self.load_path = None
         self.save_path = './models'
         self.num_actions = 1
@@ -41,8 +45,8 @@ class Config(object):
         self.num_timesteps = 100000
         self.batch_size = 32
         self.n_steps = 1
-        self.buffer_size = 10000
-        self.learning_starts = 10000
+        self.buffer_size = 1000
+        self.learning_starts = 1000
         self.print_freq = 10
         self.train_freq = 1
         self.gamma = 0.9
@@ -55,7 +59,7 @@ class Config(object):
         self.prioritized_replay_beta_iters = None
         self.prioritized_replay_beta0 = 0.4
         self.num_tests = 10
-        self.playing_test = 50000
+        self.playing_test = 1000
 
         self.fc1_dims = 512
 
@@ -67,6 +71,8 @@ config = Config()
 set_global_seeds(config.seed)
 
 # init env
+if config.environment_type == 'multigrid':
+    register_multi_grid_env(config.env_name)
 env = init_env(config, 'train')
 
 config.num_actions = env.action_space.n

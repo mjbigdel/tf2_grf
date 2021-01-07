@@ -297,7 +297,7 @@ class Learn(tf.Module):
             mean_100ep_reward = np.mean(episode_rewards[-101:-1])
             num_episodes = len(episode_rewards)
 
-            if t % (self.config.print_freq*1000) == 0:
+            if t % (self.config.print_freq*100) == 0:
                 time_1000_step = time.time()
                 nseconds = time_1000_step - tstart
                 tstart = time_1000_step
