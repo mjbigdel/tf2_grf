@@ -13,6 +13,8 @@ class Network(tf.Module):
             return cnn(self.config)
         if self.config.network == 'mlp':
             return mlp(self.config)
+        if self.config.network == 'impala_cnn':
+            return impala_cnn(self.config)
 
     def build_models_and_agent_heads(self):
         """
@@ -70,22 +72,91 @@ class Network(tf.Module):
             return self.build_models_and_agent_heads()
 
 
-def cnn(config):
-    inputs = tf.keras.layers.Input(shape=config.obs_shape)
-    conv1 = tf.keras.layers.Conv2D(filters=32, kernel_size=8, strides=(4, 4),
-                                   activation=tf.nn.relu, name='conv1')(inputs)
-    conv2 = tf.keras.layers.Conv2D(filters=16, kernel_size=4, strides=(2, 2),
-                                   activation=tf.nn.relu, name='conv2')(conv1)
-    conv3 = tf.keras.layers.Conv2D(filters=16, kernel_size=2, strides=(1, 1),
-                                   activation=tf.nn.relu, name='conv3')(conv2)
-    flatten = tf.keras.layers.Flatten(name='flatten')(conv3)
-    outputs = tf.keras.layers.Dense(config.fc1_dims, activation=tf.nn.relu, name='dense1')(flatten)
+def conv(num_ch, ks, st, pad, name, k_init, b_init):
+    return tf.keras.layers.Conv2D(filters=num_ch, kernel_size=ks, strides=st, padding=pad, name=f'conv2_{name}',
+                                  kernel_initializer=k_init, bias_initializer=b_init)
 
-    return tf.keras.Model(inputs=inputs, outputs=outputs, name=config.network)
+
+def dense(units, name, k_init, b_init, act=tf.keras.activations.relu):
+    return tf.keras.layers.Dense(units=units, activation=act, kernel_initializer=k_init,
+                                 bias_initializer=b_init, name=name)
+
+
+def cnn(config):
+    # basic variables
+    conv_layers = config.conv_layers
+    kernel_init = tf.keras.initializers.Orthogonal(gain=1.0)
+    bias_init = tf.keras.initializers.Constant(0.0)
+
+    # inputs
+    inputs_obs = tf.keras.layers.Input(shape=config.obs_shape)
+
+    # neural network
+    conv_out = inputs_obs
+    conv_out = tf.cast(conv_out, dtype=tf.float32) / 255.
+    for i, layer in enumerate(conv_layers):
+        conv_out = conv(layer[0], layer[1], layer[2], 'same', f'conv_{i}', kernel_init, bias_init)(conv_out)
+        conv_out = tf.keras.layers.Activation(tf.nn.relu)(conv_out)
+
+    conv_out = tf.keras.layers.Flatten(name='flatten')(conv_out)
+    conv_out = dense(config.fc1_dims, 'dense1', kernel_init, bias_init, tf.nn.relu)(conv_out)
+    return tf.keras.Model(inputs=inputs_obs, outputs=conv_out, name=config.network)
 
 
 def mlp(config):
-    inputs = tf.keras.layers.Input((config.obs_shape), name='Input_obs')
-    outputs = tf.keras.layers.Flatten(name='flatten')(inputs)
-    outputs = tf.keras.layers.Dense(64, name='h1_dense')(outputs)
-    return tf.keras.Model(inputs=inputs, outputs=outputs, name=config.network)
+    # basic variables
+    kernel_init = tf.keras.initializers.Orthogonal(gain=1.0)
+    bias_init = tf.keras.initializers.Constant(0.0)
+
+    # inputs
+    inputs_obs = tf.keras.layers.Input(config.obs_shape, name='Input_obs')
+
+    # neural network
+    outputs = tf.keras.layers.Flatten(name='flatten')(inputs_obs)
+    outputs = dense(config.fc1_dims, 'dense1', kernel_init, bias_init, tf.nn.relu)(outputs)
+
+    return tf.keras.Model(inputs=inputs_obs, outputs=outputs, name=config.network)
+
+
+def impala_cnn(config):
+    """
+
+    :param config: config object containing all parameters and hyper-parameters
+        resnet style with config.impala_layers inspired from IMPALA paper
+    :return: Tensorflow Keras Model
+    """
+    # basic variables
+    impala_layers = config.impala_layers
+    kernel_init = tf.keras.initializers.Orthogonal(gain=1.0)
+    bias_init = tf.keras.initializers.Constant(0.0)
+
+    # inputs
+    inputs_obs = tf.keras.layers.Input(shape=config.obs_shape)
+
+    # neural network
+    conv_out = inputs_obs
+    conv_out = tf.cast(conv_out, dtype=tf.float32) / 255.
+
+    for i, (num_ch, num_blocks) in enumerate(impala_layers):
+        conv_out = conv(num_ch, 3, 1, 'same', f'conv_{i}', kernel_init, bias_init)(conv_out)
+        conv_out = tf.keras.layers.MaxPooling2D((3, 3), padding='same', strides=2, name=f'maxP_{i}')(conv_out)
+
+        for j in range(num_blocks):
+            with tf.name_scope('residual_%d_%d' % (i, j)):
+                block_input = conv_out
+                conv_out = tf.keras.layers.Activation(tf.nn.relu, name=f'act_{i}_{j}_1')(conv_out)
+                conv_out = conv(num_ch, 3, 1, 'same', f'conv_{i}_{j}_1', kernel_init, bias_init)(conv_out)
+                conv_out = conv(num_ch, 3, 1, 'same', f'conv_{i}_{j}_2', kernel_init, bias_init)(conv_out)
+
+                conv_out += block_input
+
+    conv_out = tf.keras.layers.Activation(tf.nn.relu)(conv_out)
+    conv_out = tf.keras.layers.BatchNormalization()(conv_out)
+    conv_out = tf.keras.layers.Flatten()(conv_out)
+    conv_out = dense(config.fc1_dims, 'dense1', kernel_init, bias_init, tf.nn.relu)(conv_out)
+
+    return tf.keras.Model(inputs=inputs_obs, outputs=conv_out, name=config.network)
+
+
+
+
