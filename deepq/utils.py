@@ -35,8 +35,8 @@ def init_env(config, mode='train'):
         else:
             rewards = test_rewards
             render = config.render_test
-        return create_ma_env(num_agents, render, stacked, env_name, representationType,
-                             channel_dim, rewards, data_path)
+        return create_ma_env(num_agents, render, stacked, env_name, representationType, channel_dim,
+                             rewards, data_path)
 
     if config.environment_type == 'multigrid':
         from common.envs import MultiGrid

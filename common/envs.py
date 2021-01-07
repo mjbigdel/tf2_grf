@@ -15,22 +15,19 @@
 """A simple example of setting up a multi-agent version of GFootball with rllib.
     with some modifications
 """
-import gym
-from gym.envs.registration import register
-import gym_minigrid
 from gym_minigrid.wrappers import *
 from common.atari_wrappers import make_atari, wrap_deepmind, Monitor
 from common import logger
-
+from ray.rllib.env.multi_agent_env import MultiAgentEnv
 import numpy as np
 
 
-class RllibGFootball():
+class RllibGFootball(MultiAgentEnv):
     """An example of a wrapper for GFootball to make it compatible with rllib."""
     _counter = 0
 
-    def __init__(self, num_agents, render, stacked, env_name, representationType, channel_dim, rewards, data_path,
-                 **kwargs):
+    def __init__(self, num_agents, render, stacked, env_name, representationType,
+                 channel_dim, rewards, data_path, **kwargs):
         import gfootball.env as football_env
         self.id = RllibGFootball._counter
         RllibGFootball._counter += 1

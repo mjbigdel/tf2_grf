@@ -318,25 +318,25 @@ class Learn(tf.Module):
 
         test_rewards = np.zeros(num_tests)
         for i in range(num_tests):
-            test_done = False
+            done = False
             obs = test_env.reset()
             iter = 0
-            while not test_done and iter < self.config.max_episodes_length:
+            while True:
                 iter += 1
                 actions, _ = self.get_actions(tf.constant(obs), stochastic=False)
+                # print(f'actions[0] {actions[0]}, test_done {done}, {iter}')
                 if self.config.num_agents == 1:
                     obs1, rews, done, _ = test_env.step(actions[0])
                 else:
                     obs1, rews, done, _ = test_env.step(actions)
                     # ToDo fingerprint computation
 
-                # print(f'iter {iter} actions {actions} rews {rews}')
-
                 obs = obs1
 
-                if test_done:
+                if done or iter >= self.config.max_episodes_length:
                     print(f'test {i} rewards is {rews}')
                     test_rewards[i] = np.mean(rews)
+                    break
 
         print(f'test_rewards: {test_rewards} \n mean reward of {num_tests} tests: {np.mean(test_rewards)}')
         test_env.close()
