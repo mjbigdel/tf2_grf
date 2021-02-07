@@ -6,16 +6,16 @@ import tensorflow as tf
 from common import logger
 from common.schedules import LinearSchedule
 
-from deepq.agent import Agent
-from deepq.replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
-from deepq.network import Network
-from deepq.utils import discount_with_dones, init_env
+from distdeepq.agent import Agent
+from distdeepq.replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
+from distdeepq.network import Network
+from distdeepq.utils import discount_with_dones, init_env
 
 
 # Learning
 class Learn:
     def __init__(self, config, env):
-        super().__init__()
+        # super().__init__()
         self.config = config
         self.env = env
         self.agent_ids = self.get_agent_ids()
@@ -29,6 +29,7 @@ class Learn:
 
         self.models, self.target_models = self._init_networks()
 
+        support_z = np.linspace(-5.0, 5.0, self.config.atoms)
         self.agents = [Agent(config, self.models[agent_id],
                              self.target_models[agent_id], agent_id) for agent_id in self.agent_ids]
 
@@ -67,7 +68,11 @@ class Learn:
         deterministic_actions = []
         fps = []
         for agent_id in self.agent_ids:
-            deterministic_action, fp = self.agents[agent_id].greedy_action(obs[agent_id])
+            if self.config.distributionalRL:
+                deterministic_action, fp = self.agents[agent_id].greedy_action_dist(obs[agent_id])
+            else:
+                deterministic_action, fp = self.agents[agent_id].greedy_action(obs[agent_id])
+
             deterministic_actions.append(deterministic_action)
             fps.append(fp)
         # print(f' deterministic_actions {deterministic_actions}')
@@ -102,13 +107,16 @@ class Learn:
         """
         best_q_vals = []
         for agent_id in self.agent_ids:
-            best_q_val = self.agents[agent_id].max_value(obs[agent_id])
+            if self.config.distributionalRL:
+                best_q_val = self.agents[agent_id].max_value_dist(obs[agent_id])
+            else:
+                best_q_val = self.agents[agent_id].max_value(obs[agent_id])
             best_q_vals.append(best_q_val)
         # print(f' best_q_vals.numpy() {best_q_vals.numpy()}')
         return best_q_vals
 
     @tf.function
-    def compute_loss(self, obses_t, actions, rewards, dones, weights, fps=None):
+    def compute_loss(self, obses_t, actions, rewards, obs_tp1, dones, weights, fps=None):
         """
         :param obses_t: list observations one for each agent
         :param actions:
@@ -121,18 +129,24 @@ class Learn:
         losses = []
         td_errors = []
         for agent_id in self.agent_ids:
-            loss, td_error = self.agents[agent_id].compute_loss(obses_t[agent_id], actions[agent_id],
-                                                                rewards[agent_id], dones[agent_id],
-                                                                weights[agent_id], fps=None)
+            if self.config.distributionalRL:
+                loss, td_error = self.agents[agent_id].compute_loss_dist(obses_t[agent_id], actions[agent_id],
+                                                                    rewards[agent_id], obs_tp1[agent_id], dones[agent_id],
+                                                                    weights[agent_id], fps=None)
+            else:
+                loss, td_error = self.agents[agent_id].compute_loss(obses_t[agent_id], actions[agent_id],
+                                                                    rewards[agent_id], obs_tp1[agent_id], dones[agent_id],
+                                                                    weights[agent_id], fps=None)
+
             losses.append(loss)
             td_errors.append(td_error)
 
         return losses, td_errors
 
     @tf.function()
-    def train(self, obses_t, actions, rewards, dones, weights, fps=None):
+    def train(self, obses_t, actions, rewards, obs_tp1, dones, weights, fps=None):
         with tf.GradientTape() as tape:
-            losses, td_errors = self.compute_loss(obses_t, actions, rewards, dones, weights, fps)
+            losses, td_errors = self.compute_loss(obses_t, actions, rewards, obs_tp1, dones, weights, fps)
             loss = tf.reduce_sum(losses)
 
         params = tape.watched_variables()
@@ -160,6 +174,23 @@ class Learn:
                 fps.append(fp_a)
         return fps
 
+    def compute_n_step_return(self, mb_rewards, mb_dones, obs1):
+        if self.config.gamma > 0.0:
+            # print(f' last_values {last_values}')
+            last_values = self.get_max_values(tf.constant(obs1))
+            for agent_id, (rewards, dones, value) in enumerate(zip(mb_rewards, mb_dones, last_values)):
+                rewards = rewards.tolist()
+                dones = dones.tolist()
+                value = value.tolist()
+                if dones[-1] == 0:
+                    rewards = discount_with_dones(rewards + [value], dones + [0], self.config.gamma)[:-1]
+                else:
+                    rewards = discount_with_dones(rewards, dones, self.config.gamma)
+
+                mb_rewards[agent_id] = rewards
+
+        return mb_rewards
+
     def learn(self):
         episode_rewards = [0.0]
         obs = self.env.reset()
@@ -177,6 +208,7 @@ class Learn:
             for n_step in range(self.config.n_steps):
                 # print(f't is {t} -- n_steps is {n_step}')
                 actions, _ = self.get_actions(tf.constant(obs), update_eps=update_eps)
+                # print(f'actions is {actions}')
                 if self.config.num_agents == 1:
                     obs1, rews, done, _ = self.env.step(actions[0])
                 else:
@@ -205,6 +237,7 @@ class Learn:
             # swap axes to have lists in shape of (num_agents, num_steps, ...)
             # print(f' mb_obs.shape is {np.array(mb_obs).shape}')
             mb_obs = np.asarray(mb_obs, dtype=obs[0].dtype).swapaxes(0, 1)
+            obs_tp1 = np.asarray([obs1], dtype=obs1[0].dtype).swapaxes(0, 1)
             # print(f' mb_obs.shape is {np.array(mb_obs).shape}')
             mb_actions = np.asarray(mb_actions, dtype=actions[0].dtype).swapaxes(0, 1)
             mb_rewards = np.asarray(mb_rewards, dtype=np.float32).swapaxes(0, 1)
@@ -215,47 +248,39 @@ class Learn:
 
             # print(f' before discount mb_rewards is {mb_rewards}')
 
-            if self.config.gamma > 0.0:
-                # print(f' last_values {last_values}')
-                for agent_id, (rewards, dones) in enumerate(zip(mb_rewards, mb_dones)):
-                    value = self.agents[agent_id].max_value(tf.constant(obs1[agent_id]))
-                    rewards = rewards.tolist()
-                    dones = dones.tolist()
-                    if dones[-1] == 0:
-                        rewards = discount_with_dones(rewards + [value], dones + [0], self.config.gamma)[:-1]
-                    else:
-                        rewards = discount_with_dones(rewards, dones, self.config.gamma)
-
-                    mb_rewards[agent_id] = rewards
-
+            mb_rewards = self.compute_n_step_return(mb_rewards, mb_dones, obs1)
             # print(f' after discount mb_rewards is {mb_rewards}')
 
             if self.config.replay_buffer is not None:
-                self.replay_memory.add(mb_obs, mb_actions, mb_rewards, mb_obs1, mb_masks)
+                self.replay_memory.add(mb_obs, mb_actions, mb_rewards, obs_tp1, mb_masks)
 
             if t > self.config.learning_starts and t % self.config.train_freq == 0:
                 if self.config.prioritized_replay:
                     experience = self.replay_memory.sample(self.config.batch_size, beta=self.beta_schedule.value(t))
-                    (obses_t, actions, rewards, obses_tp1, dones, weights, batch_idxes) = experience
+                    (obses_t, actions, rewards, obs_tp1, dones, weights, batch_idxes) = experience
                 else:
-                    obses_t, actions, rewards, obses_tp1, dones = self.replay_memory.sample(self.config.batch_size)
+                    obses_t, actions, rewards, obs_tp1, dones = self.replay_memory.sample(self.config.batch_size)
                     weights, batch_idxes = np.ones_like(rewards), None
 
                 # print(f'obses_t.shape {obses_t.shape}')
+                # print(f'obs_tp1.shape {obs_tp1.shape}')
                 #  shape format is (batch_size, agent_num, n_steps, ...)
                 obses_t = obses_t.swapaxes(0, 1)
                 actions = actions.swapaxes(0, 1)
+                obs_tp1 = obs_tp1.swapaxes(0, 1)
                 rewards = rewards.swapaxes(0, 1)
-                obses_tp1 = obses_tp1.swapaxes(0, 1)
                 dones = dones.swapaxes(0, 1)
                 weights = weights.swapaxes(0, 1)
 
                 # print(f'obses_t.shape {obses_t.shape}')
+                # print(f'obs_tp1.shape {obs_tp1.shape}')
                 #  shape format is (agent_num, batch_size, n_steps, ...)
 
                 if 'rnn' not in self.config.network:
                     shape = obses_t.shape
                     obses_t = np.reshape(obses_t, (shape[0], shape[1] * shape[2], *shape[3:]))
+                    shape = obs_tp1.shape
+                    obs_tp1 = np.reshape(obs_tp1, (shape[0], shape[1] * shape[2], *shape[3:]))
                     shape = actions.shape
                     actions = np.reshape(actions, (shape[0], shape[1] * shape[2], *shape[3:]))
                     shape = rewards.shape
@@ -269,18 +294,20 @@ class Learn:
                     #  shape format is (agent_num, batch_size * n_steps, ...)
 
                 obses_t = tf.constant(obses_t)
+                obs_tp1 = tf.constant(obs_tp1)
                 actions = tf.constant(actions)
                 rewards = tf.constant(rewards)
                 dones = tf.constant(dones)
                 weights = tf.constant(weights)
 
                 # print(f' obses_t.shape {obses_t.shape}')
+                # print(f' obs_tp1.shape {obs_tp1.shape}')
                 # print(f' actions.shape {actions.shape}')
                 # print(f' rewards.shape {rewards.shape}')
                 # print(f' dones.shape {dones.shape}')
                 # print(f' weights.shape {weights.shape}')
 
-                loss, td_errors = self.train(obses_t, actions, rewards, dones, weights)
+                loss, td_errors = self.train(obses_t, actions, rewards, obs_tp1, dones, weights)
 
                 if t % (self.config.train_freq * 50) == 0:
                     print(f't = {t} , loss = {loss}')
@@ -297,11 +324,11 @@ class Learn:
             mean_100ep_reward = np.mean(episode_rewards[-101:-1])
             num_episodes = len(episode_rewards)
 
-            if t % (self.config.print_freq*100) == 0:
+            if t % (self.config.print_freq*10) == 0:
                 time_1000_step = time.time()
                 nseconds = time_1000_step - tstart
                 tstart = time_1000_step
-                print(f'eps {self.exploration.value(t)} -- time {t - self.config.print_freq*1000} to {t} steps: {nseconds}')
+                print(f'eps {self.exploration.value(t)} -- time {t - self.config.print_freq*10} to {t} steps: {nseconds}')
 
             # if done and self.config.print_freq is not None and len(episode_rewards) % self.config.print_freq == 0:
             if episodes_trained[1] and episodes_trained[0] % self.config.print_freq == 0:

@@ -5,7 +5,7 @@ from common.segment_tree import SumSegmentTree, MinSegmentTree
 
 
 # Replay Buffer
-class ReplayBuffer:
+class ReplayBuffer(object):
     def __init__(self, size):
         self._storage = []
         self._maxsize = size

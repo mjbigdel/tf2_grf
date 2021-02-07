@@ -4,7 +4,7 @@ from deepq.utils import huber_loss
 
 
 # Agent
-class Agent(tf.Module):
+class Agent:
     def __init__(self, config, model, target_model, agent_id):
         super().__init__()
         self.agent_id = agent_id
@@ -58,7 +58,7 @@ class Agent(tf.Module):
 
     @tf.function()
     def compute_loss(self, obses_t, actions, rewards, dones, weights, fps=None):
-        # print(f' obs.shape {obs.shape}')
+        # print(f' obs.shape {obses_t.shape}')
         q_t = self.model(obses_t)
 
         q_t_selected = tf.reduce_sum(q_t * tf.one_hot(actions, self.config.num_actions, dtype=tf.float32), 1)

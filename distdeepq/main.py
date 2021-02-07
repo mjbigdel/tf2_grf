@@ -1,22 +1,22 @@
 import tensorflow as tf
 # physical_devices = tf.config.list_physical_devices('GPU')
 # tf.config.experimental.set_memory_growth(physical_devices[0], True)
-from deepq.utils import init_env, set_global_seeds, register_multi_grid_env
-from deepq.learn import Learn
+from distdeepq.utils import init_env, set_global_seeds, register_multi_grid_env
+from distdeepq.learn import Learn
 
 
-class Config:
+class Config(object):
     def __init__(self):
         # gym -> 'BreakoutNoFrameskip-v4', ...
         # GFootball -> 'academy_3_vs_1_with_keeper'  'academy_empty_goal', ...
         # multigrid -> 'soccer', ...
         # minigrid -> 'MiniGrid-Empty-5x5-v0', ...
         self.environment_type = 'GFootball'  # gym, GFootball, multigrid, minigrid
-        self.env_name = 'academy_empty_goal'  #
+        self.env_name = 'academy_empty_goal_close'  #
         self.num_agents = 2
         self.max_episodes_length = 100
         self.data_path = './plays/'
-        self.stacked = False
+        self.stacked = True
 
         # GFootbal Configs
         self.render_train = False
@@ -40,16 +40,18 @@ class Config:
         self.fp_shape = 0
         self.target_network_update_freq = 10
         self.tau = 0.001
+        self.atoms = 16
+        self.distributionalRL = True
 
         self.seed = 12
         self.num_timesteps = 100000
-        self.batch_size = 32
+        self.batch_size = 8
         self.n_steps = 1
-        self.buffer_size = 100
-        self.learning_starts = 100
-        self.print_freq = 10
+        self.buffer_size = 1000
+        self.learning_starts = 1000
+        self.print_freq = 1
         self.train_freq = 1
-        self.gamma = 0.9
+        self.gamma = 0.99
         self.exploration_fraction = 0.4
         self.exploration_final_eps = 0.01
         self.same_reward_for_agents = True
@@ -58,8 +60,8 @@ class Config:
         self.prioritized_replay_alpha = 0.6
         self.prioritized_replay_beta_iters = None
         self.prioritized_replay_beta0 = 0.4
-        self.num_tests = 10
-        self.playing_test = 100
+        self.num_tests = 5
+        self.playing_test = 500
 
         self.conv_layers = [(32, 8, 4), (16, 4, 2), (16, 2, 1)]  # (filters, kernel, stride)
         self.impala_layers = [(16, 2), (32, 2), (32, 2), (32, 2)]  # (filters, kernel, stride)

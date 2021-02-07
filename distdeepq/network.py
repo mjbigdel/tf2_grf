@@ -4,7 +4,7 @@ import tensorflow as tf
 # Model
 class Network:
     def __init__(self, config, agent_ids):
-        super().__init__()
+        # super().__init__()
         self.config = config
         self.agent_ids = agent_ids
 
@@ -26,10 +26,9 @@ class Network:
         heads = []
         for agent_id in self.agent_ids:
             name = self.config.network + f'_agent_{str(agent_id)}'
-            outputs_a = tf.keras.layers.Dense(units=self.config.num_actions, activation=None,
-                                              kernel_initializer=tf.keras.initializers.Orthogonal(1.0),
-                                              bias_initializer=tf.keras.initializers.Constant(0.0),
-                                              name=name)(head_inputs)
+            outputs_a = dense(self.config.num_actions, name, k_init=tf.keras.initializers.Orthogonal(1.0),
+                              b_init=tf.keras.initializers.Constant(0.0), act=None)(head_inputs)
+
             head = tf.keras.Model(inputs=base_model.inputs, outputs=outputs_a, name=name)
             heads.append(head)
         return heads
@@ -45,16 +44,12 @@ class Network:
         for agent_id in self.agent_ids:
             name = self.config.network + f'_agent_{str(agent_id)}'
             with tf.name_scope(f'action_value_{agent_id}'):
-                action_head_a = tf.keras.layers.Dense(units=self.config.num_actions, activation=None,
-                                                      kernel_initializer=tf.keras.initializers.Orthogonal(1.0),
-                                                      bias_initializer=tf.keras.initializers.Constant(0.0),
-                                                      name='action_' + name)(head_inputs)
+                action_head_a = dense(self.config.num_actions, 'action_' + name, k_init=tf.keras.initializers.Orthogonal(1.0),
+                                      b_init=tf.keras.initializers.Constant(0.0), act=None)(head_inputs)
 
             with tf.name_scope(f'state_value_{agent_id}'):
-                state_head_a = tf.keras.layers.Dense(units=1, activation=None,
-                                                     kernel_initializer=tf.keras.initializers.Orthogonal(1.0),
-                                                     bias_initializer=tf.keras.initializers.Constant(0.0),
-                                                     name='state_' + name)(head_inputs)
+                state_head_a = dense(1, 'state_' + name, k_init=tf.keras.initializers.Orthogonal(1.0),
+                                     b_init=tf.keras.initializers.Constant(0.0), act=None)(head_inputs)
 
             action_scores_mean = tf.reduce_mean(action_head_a, 1)
             action_scores_centered = action_head_a - tf.expand_dims(action_scores_mean, 1)
@@ -65,7 +60,28 @@ class Network:
 
         return heads
 
+    def build_models_and_agent_heads_dist(self):
+        """
+        :return: list of heads for agents
+            - gets tensorflow model and adds heads for each agent
+        """
+        base_model = self.init_base_model()
+        head_inputs = base_model.layers[-1].output
+        heads = []
+        for agent_id in self.agent_ids:
+            name = self.config.network + f'_agent_{str(agent_id)}'
+            outputs_a = dense(self.config.num_actions * self.config.atoms, name, k_init=tf.keras.initializers.Orthogonal(1.0),
+                              b_init=tf.keras.initializers.Constant(0.0), act='linear')(head_inputs)
+
+            outputs_a = tf.keras.layers.Reshape([self.config.num_actions, self.config.atoms], name=f'reshape_{name}')(outputs_a)
+            head = tf.keras.Model(inputs=base_model.inputs, outputs=outputs_a, name=name)
+            heads.append(head)
+        return heads
+
     def build_models(self):
+        if self.config.distributionalRL:
+            return self.build_models_and_agent_heads_dist()
+
         if self.config.dueling:
             return self.build_models_and_dueling_agent_heads()
         else:
