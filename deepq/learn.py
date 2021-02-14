@@ -119,13 +119,13 @@ class Learn:
         :return: loss and td errors tensor list one for each agent
         """
         losses = []
-        td_errors = []
+        td_errors = np.zeros(self.config.batch_size)
         for agent_id in self.agent_ids:
             loss, td_error = self.agents[agent_id].compute_loss(obses_t[agent_id], actions[agent_id],
                                                                 rewards[agent_id], dones[agent_id],
                                                                 weights[agent_id], fps=None)
             losses.append(loss)
-            td_errors.append(td_error)
+            td_errors += td_error
 
         return losses, td_errors
 
@@ -187,6 +187,8 @@ class Learn:
                 mb_actions.append(actions)
                 mb_dones.append([float(done) for _ in self.agent_ids])
 
+                # print(f'rewards is {rews}')
+
                 if self.config.same_reward_for_agents:
                     rews = [np.max(rews) for _ in range(len(rews))]  # for cooperative purpose same reward for every one
 
@@ -246,11 +248,12 @@ class Learn:
                 obses_t = obses_t.swapaxes(0, 1)
                 actions = actions.swapaxes(0, 1)
                 rewards = rewards.swapaxes(0, 1)
+                # print(f'rewards.shape {rewards.shape}')
                 obses_tp1 = obses_tp1.swapaxes(0, 1)
                 dones = dones.swapaxes(0, 1)
-                weights = weights.swapaxes(0, 1)
-
-                # print(f'obses_t.shape {obses_t.shape}')
+                print(f'weights.shape {weights.shape}')
+                weights = weights.swapaxes(0, 1)  # weights shape is (1, batch_size, n_steps)
+                print(f'weights.shape {weights.shape}')
                 #  shape format is (agent_num, batch_size, n_steps, ...)
 
                 if 'rnn' not in self.config.network:
@@ -263,7 +266,7 @@ class Learn:
                     shape = dones.shape
                     dones = np.reshape(dones, (shape[0], shape[1] * shape[2], *shape[3:]))
                     shape = weights.shape
-                    weights = np.reshape(weights, (shape[0], shape[1] * shape[2], *shape[3:]))
+                    weights = np.reshape(weights, (shape[0], shape[1]))
 
                     # print(f'obses_t.shape {obses_t.shape}')
                     #  shape format is (agent_num, batch_size * n_steps, ...)
@@ -281,6 +284,11 @@ class Learn:
                 # print(f' weights.shape {weights.shape}')
 
                 loss, td_errors = self.train(obses_t, actions, rewards, dones, weights)
+
+                # print(f'td_errors.shape = {np.array(td_errors).shape} , batch_idxes.shape = {np.array(batch_idxes).shape}')
+                if self.config.prioritized_replay:
+                    new_priorities = np.abs(td_errors) + self.config.prioritized_replay_eps
+                    self.replay_memory.update_priorities(batch_idxes, new_priorities)
 
                 if t % (self.config.train_freq * 50) == 0:
                     print(f't = {t} , loss = {loss}')
@@ -334,7 +342,7 @@ class Learn:
                 obs = obs1
 
                 if done or iter >= self.config.max_episodes_length:
-                    print(f'test {i} rewards is {rews}')
+                    # print(f'test {i} rewards is {rews}')
                     test_rewards[i] = np.mean(rews)
                     break
 

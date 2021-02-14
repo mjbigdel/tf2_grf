@@ -366,10 +366,10 @@ class Agent(tf.Module):
             for extra_step in range(self.config.n_steps - len(mb_actions)):
                 print('extra_info as 0 s added added ')
                 mb_obs.insert(0, obs * 0.)
-                mb_actions.insert(0, mb_actions * 0.)
-                mb_rewards.insert(0, mb_rewards * 0.)
-                mb_fps.insert(0, mb_fps * 0.)
-                mb_dones.insert(0, mb_dones * 0.)
+                mb_actions.insert(0, mb_actions[-1] * 0.)
+                mb_rewards.insert(0, mb_rewards[-1] * 0.)
+                mb_fps.insert(0, mb_fps[-1] * 0.)
+                mb_dones.insert(0, mb_dones[-1] * 0.)
 
             mb_obs = np.asarray(mb_obs, dtype=obs[0].dtype).swapaxes(0, 1)
             mb_actions = np.asarray(mb_actions, dtype=actions[0].dtype).swapaxes(0, 1)

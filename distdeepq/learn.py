@@ -29,15 +29,15 @@ class Learn:
 
         self.models, self.target_models = self._init_networks()
 
-        support_z = np.linspace(-5.0, 5.0, self.config.atoms)
         self.agents = [Agent(config, self.models[agent_id],
                              self.target_models[agent_id], agent_id) for agent_id in self.agent_ids]
+        self.support_z = np.linspace(-5.0, 5.0, self.config.atoms)
 
     def _init_networks(self):
         network = Network(self.config, self.agent_ids)
         # base_model = network.init_base_model()
         # target_base_model = network.init_base_model()
-        return network.build_models(), network.build_models()
+        return network.build_models("learn_"), network.build_models("target_")
 
     def get_agent_ids(self):
         return [agent_id for agent_id in range(self.config.num_agents)]
@@ -111,6 +111,7 @@ class Learn:
                 best_q_val = self.agents[agent_id].max_value_dist(obs[agent_id])
             else:
                 best_q_val = self.agents[agent_id].max_value(obs[agent_id])
+
             best_q_vals.append(best_q_val)
         # print(f' best_q_vals.numpy() {best_q_vals.numpy()}')
         return best_q_vals
@@ -145,11 +146,15 @@ class Learn:
 
     @tf.function()
     def train(self, obses_t, actions, rewards, obs_tp1, dones, weights, fps=None):
+
         with tf.GradientTape() as tape:
             losses, td_errors = self.compute_loss(obses_t, actions, rewards, obs_tp1, dones, weights, fps)
             loss = tf.reduce_sum(losses)
 
-        params = tape.watched_variables()
+        # params = tape.watched_variables()
+        params = []
+        for agent_id in self.agent_ids:
+            params += self.agents[agent_id].model.trainable_variables
         # print(f' param {params}')
         grads = tape.gradient(loss, params)
 
@@ -200,8 +205,6 @@ class Learn:
         tstart = time.time()
         episodes_trained = [0, False]  # [episode_number, Done flag]
         for t in range(self.config.num_timesteps):
-            # if t == 102:
-            #     break
             update_eps = tf.constant(self.exploration.value(t))
 
             mb_obs, mb_rewards, mb_actions, mb_obs1, mb_dones = [], [], [], [], []

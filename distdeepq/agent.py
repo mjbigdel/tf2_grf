@@ -129,14 +129,7 @@ class Agent:
 
         return weighted_loss, td_error
 
-    @tf.function()
-    def compute_loss_dist(self, obses_t, actions, rewards, obs_tp1, dones, weights, fps=None):
-        # print(f' obses_t.shape {obses_t.shape}')
-        # rewards = tf.stop_gradient(rewards)
-
-        logits = self.model(obses_t)
-        # print(f' logits.shape {logits.shape}')
-
+    def build_target_ditribution(self, obses_t, actions, rewards, obs_tp1, dones, weights, fps=None):
         zz = self.model(obs_tp1)
         # print(f' zz.shape {zz.shape}')
         q = tf.reduce_sum(tf.math.multiply(zz, self.z), axis=-1)
@@ -144,6 +137,8 @@ class Agent:
         next_actions = tf.argmax(q, axis=1)  # a* in C51 algo
 
         zz_ = self.target_model(obs_tp1)
+        # zz_ = tf.stop_gradient(zz_)
+        # rewards = tf.stop_gradient(rewards)
         # print(f' zz_.shape {zz_.shape}')
         # z_concat = tf.stack(z)
 
@@ -169,53 +164,26 @@ class Agent:
                     m_prob[i][actions[i]][int(l)] += zz_[i][next_actions[i]][j] * (u - bj)
                     m_prob[i][actions[i]][int(u)] += zz_[i][next_actions[i]][j] * (bj - l)
 
-        m_prob = tf.stop_gradient(m_prob)
+        return m_prob
+
+    @tf.function()
+    def compute_loss_dist(self, obses_t, actions, rewards, obs_tp1, dones, weights, fps=None):
+        # print(f' obses_t.shape {obses_t.shape}')
+        # rewards = tf.stop_gradient(rewards)
+        logits = self.model(obses_t)
+        # print(f' logits.shape {logits.shape}')
+
+        m_prob = tf.stop_gradient(self.build_target_ditribution(obses_t, actions,
+                                                                rewards, obs_tp1, dones, weights, fps=None))
 
         loss = tf.nn.softmax_cross_entropy_with_logits(labels=m_prob, logits=logits)
         # loss = self.loss_dist(m_prob, logits, sample_weight=None)
 
         loss = tf.reduce_mean(loss)
-
         print(f' loss {loss}')
 
         td_error = 0.0
         return loss, td_error
-
-    @tf.function
-    def quantile_huber_loss(self, target, pred, actions):
-        pred = tf.reduce_sum(pred * tf.expand_dims(actions, -1), axis=1)
-        pred_tile = tf.tile(tf.expand_dims(pred, axis=2), [1, 1, self.atoms])
-        target_tile = tf.tile(tf.expand_dims(target, axis=1), [1, self.atoms, 1])
-        td_error = target_tile - pred_tile
-        hub_loss = huber_loss(td_error)
-        tau = tf.reshape(np.array(self.tau), [1, self.atoms])
-        inv_tau = 1.0 - tau
-        tau = tf.tile(tf.expand_dims(tau, axis=1), [1, self.atoms, 1])
-        inv_tau = tf.tile(tf.expand_dims(inv_tau, axis=1), [1, self.atoms, 1])
-        error_loss = tf.math.subtract(target_tile, pred_tile)
-        loss = tf.where(tf.less(error_loss, 0.0), inv_tau * hub_loss, tau * hub_loss)
-        loss = tf.reduce_mean(tf.reduce_sum(
-            tf.reduce_mean(loss, axis=2), axis=1))
-        return loss
-
-    @tf.function
-    def kl(self, y_target, y_pred, weights):
-        a0 = y_target - tf.reduce_max(y_target, axis=-1, keepdims=True)
-        a1 = y_pred - tf.reduce_max(y_pred, axis=-1, keepdims=True)
-        ea0 = tf.exp(a0)
-        ea1 = tf.exp(a1)
-        z0 = tf.reduce_sum(ea0, axis=-1, keepdims=True)
-        z1 = tf.reduce_sum(ea1, axis=-1, keepdims=True)
-        p0 = ea0 / z0
-        return tf.reduce_sum(p0 * (a0 - tf.math.log(z0) - a1 + tf.math.log(z1)), axis=-1)
-
-    @tf.function
-    def _per_loss(self, y_target, y_pred):
-        return tf.reduce_mean(self.is_weight * tf.math.squared_difference(y_target, y_pred))
-
-    @tf.function
-    def _kl_loss(self, y_target, y_pred, weights):  # cross_entropy loss
-        return tf.reduce_mean(tf.keras.losses.categorical_crossentropy(y_pred=y_pred, y_true=y_target, from_logits=True))
 
     @tf.function(autograph=False)
     def update_target(self):
@@ -233,3 +201,42 @@ class Agent:
     def load(self):
         self.model.load_weights(f'{self.config.load_path}/model_agent_{self.agent_id}.h5')
         self.target_model.load_weights(f'{self.config.load_path}/model_agent_{self.agent_id}.h5')
+
+
+
+
+# @tf.function
+#     def quantile_huber_loss(self, target, pred, actions):
+#         pred = tf.reduce_sum(pred * tf.expand_dims(actions, -1), axis=1)
+#         pred_tile = tf.tile(tf.expand_dims(pred, axis=2), [1, 1, self.atoms])
+#         target_tile = tf.tile(tf.expand_dims(target, axis=1), [1, self.atoms, 1])
+#         td_error = target_tile - pred_tile
+#         hub_loss = huber_loss(td_error)
+#         tau = tf.reshape(np.array(self.tau), [1, self.atoms])
+#         inv_tau = 1.0 - tau
+#         tau = tf.tile(tf.expand_dims(tau, axis=1), [1, self.atoms, 1])
+#         inv_tau = tf.tile(tf.expand_dims(inv_tau, axis=1), [1, self.atoms, 1])
+#         error_loss = tf.math.subtract(target_tile, pred_tile)
+#         loss = tf.where(tf.less(error_loss, 0.0), inv_tau * hub_loss, tau * hub_loss)
+#         loss = tf.reduce_mean(tf.reduce_sum(
+#             tf.reduce_mean(loss, axis=2), axis=1))
+#         return loss
+#
+#     @tf.function
+#     def kl(self, y_target, y_pred, weights):
+#         a0 = y_target - tf.reduce_max(y_target, axis=-1, keepdims=True)
+#         a1 = y_pred - tf.reduce_max(y_pred, axis=-1, keepdims=True)
+#         ea0 = tf.exp(a0)
+#         ea1 = tf.exp(a1)
+#         z0 = tf.reduce_sum(ea0, axis=-1, keepdims=True)
+#         z1 = tf.reduce_sum(ea1, axis=-1, keepdims=True)
+#         p0 = ea0 / z0
+#         return tf.reduce_sum(p0 * (a0 - tf.math.log(z0) - a1 + tf.math.log(z1)), axis=-1)
+#
+#     @tf.function
+#     def _per_loss(self, y_target, y_pred):
+#         return tf.reduce_mean(self.is_weight * tf.math.squared_difference(y_target, y_pred))
+#
+#     @tf.function
+#     def _kl_loss(self, y_target, y_pred, weights):  # cross_entropy loss
+#         return tf.reduce_mean(tf.keras.losses.categorical_crossentropy(y_pred=y_pred, y_true=y_target, from_logits=True))

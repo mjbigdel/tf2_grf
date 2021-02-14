@@ -16,7 +16,7 @@ class Network:
         if self.config.network == 'impala_cnn':
             return impala_cnn(self.config)
 
-    def build_models_and_agent_heads(self):
+    def build_models_and_agent_heads(self, name):
         """
         :return: list of heads for agents
             - gets tensorflow model and adds heads for each agent
@@ -25,7 +25,7 @@ class Network:
         head_inputs = base_model.layers[-1].output
         heads = []
         for agent_id in self.agent_ids:
-            name = self.config.network + f'_agent_{str(agent_id)}'
+            name += self.config.network + f'_agent_{str(agent_id)}'
             outputs_a = dense(self.config.num_actions, name, k_init=tf.keras.initializers.Orthogonal(1.0),
                               b_init=tf.keras.initializers.Constant(0.0), act=None)(head_inputs)
 
@@ -33,7 +33,7 @@ class Network:
             heads.append(head)
         return heads
 
-    def build_models_and_dueling_agent_heads(self):
+    def build_models_and_dueling_agent_heads(self, name):
         """
         :return: list of heads for agents
             - gets tensorflow model and adds heads for each agent
@@ -42,7 +42,7 @@ class Network:
         head_inputs = base_model.layers[-1].output
         heads = []
         for agent_id in self.agent_ids:
-            name = self.config.network + f'_agent_{str(agent_id)}'
+            name += self.config.network + f'_agent_{str(agent_id)}'
             with tf.name_scope(f'action_value_{agent_id}'):
                 action_head_a = dense(self.config.num_actions, 'action_' + name, k_init=tf.keras.initializers.Orthogonal(1.0),
                                       b_init=tf.keras.initializers.Constant(0.0), act=None)(head_inputs)
@@ -60,7 +60,7 @@ class Network:
 
         return heads
 
-    def build_models_and_agent_heads_dist(self):
+    def build_models_and_agent_heads_dist(self, name):
         """
         :return: list of heads for agents
             - gets tensorflow model and adds heads for each agent
@@ -69,7 +69,7 @@ class Network:
         head_inputs = base_model.layers[-1].output
         heads = []
         for agent_id in self.agent_ids:
-            name = self.config.network + f'_agent_{str(agent_id)}'
+            name += self.config.network + f'_agent_{str(agent_id)}'
             outputs_a = dense(self.config.num_actions * self.config.atoms, name, k_init=tf.keras.initializers.Orthogonal(1.0),
                               b_init=tf.keras.initializers.Constant(0.0), act='linear')(head_inputs)
 
@@ -78,14 +78,14 @@ class Network:
             heads.append(head)
         return heads
 
-    def build_models(self):
+    def build_models(self, name):
         if self.config.distributionalRL:
-            return self.build_models_and_agent_heads_dist()
+            return self.build_models_and_agent_heads_dist(name)
 
         if self.config.dueling:
-            return self.build_models_and_dueling_agent_heads()
+            return self.build_models_and_dueling_agent_heads(name)
         else:
-            return self.build_models_and_agent_heads()
+            return self.build_models_and_agent_heads(name)
 
 
 def conv(num_ch, ks, st, pad, name, k_init, b_init):

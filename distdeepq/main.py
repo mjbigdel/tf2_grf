@@ -15,19 +15,20 @@ class Config(object):
         self.env_name = 'academy_empty_goal_close'  #
         self.num_agents = 2
         self.max_episodes_length = 100
+        self.num_episodes = 10000
         self.data_path = './plays/'
-        self.stacked = True
+        self.stacked = False
 
         # GFootbal Configs
         self.render_train = False
         self.render_test = False
-        self.channel_dim = (96, 72)
+        self.channel_dim = (96//2, 72//2)
         self.representationType = 'extracted'  # 'extracted': minimaps, 'pixels': raw pixels, 'simple115': vector of 115
         self.train_rewards = 'checkpoints,scoring'
         self.test_rewards = 'scoring'
 
         # Network Configs
-        self.network = 'impala_cnn'  # 'impala_cnn', 'cnn', 'mlp'
+        self.network = 'cnn'  # 'impala_cnn', 'cnn', 'mlp'
         self.load_path = None
         self.save_path = './models'
         self.num_actions = 1
@@ -48,7 +49,7 @@ class Config(object):
         self.batch_size = 8
         self.n_steps = 1
         self.buffer_size = 1000
-        self.learning_starts = 1000
+        self.learning_starts = 100
         self.print_freq = 1
         self.train_freq = 1
         self.gamma = 0.99
@@ -60,13 +61,14 @@ class Config(object):
         self.prioritized_replay_alpha = 0.6
         self.prioritized_replay_beta_iters = None
         self.prioritized_replay_beta0 = 0.4
+        self.prioritized_replay_eps = 1e-6
         self.num_tests = 5
         self.playing_test = 500
 
         self.conv_layers = [(32, 8, 4), (16, 4, 2), (16, 2, 1)]  # (filters, kernel, stride)
         self.impala_layers = [(16, 2), (32, 2), (32, 2), (32, 2)]  # (filters, kernel, stride)
-        self.fc1_dims = 512
-        self.fc2_dims = 512
+        self.fc1_dims = 256
+        self.fc2_dims = 256
         self.rnn_dim = 512
 
 
