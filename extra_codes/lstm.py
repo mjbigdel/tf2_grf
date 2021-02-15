@@ -74,15 +74,7 @@
 #         return act(z)
 #
 #
-# def batch_to_seq(x):
-#     n_step = x.shape[0]
-#     if len(x.shape) == 1:
-#         x = tf.expand_dims(x, -1)
-#     return tf.split(axis=0, num_or_size_splits=n_step, value=x)
-#
-#
-# def seq_to_batch(x):
-#     return tf.concat(x, axis=0)
+
 #
 #
 # def lstm(xs, dones, s, scope, init_scale=DEFAULT_SCALE, init_mode=DEFAULT_MODE,
@@ -117,62 +109,78 @@
 #     return seq_to_batch(xs), tf.squeeze(s)
 #
 #
-# class LSTM_M(tf.keras.layers.Layer):
-#     def __init__(self, units=32, scope='LSTM_M', init_scale=DEFAULT_SCALE, init_mode=DEFAULT_MODE, init_method=DEFAULT_METHOD):
-#         super(LSTM_M, self).__init__()
-#         print('init ----- ')
-#         self.units = units
-#         self.scope = scope
-#         self.init_scale = init_scale
-#         self.init_mode = init_mode
-#         self.init_method = init_method
-#
-#
-#     def build(self, input_shape):
-#         n_in = input_shape[0][1]
-#         # self.n_out = input_shape[0][0] // 2
-#         self.n_out = self.units
-#         self.states = np.zeros(self.n_out * 2, dtype=np.float32)
-#         print('build ----- ')
-#         print(f'n_in is {n_in}')
-#         print(f'self.n_out is {self.n_out}')
-#         with tf.name_scope(self.scope):
-#             self.wx = self.add_weight(shape=(n_in, self.n_out * 4), initializer='uniform', name="wx")
-#
-#             self.wh = self.add_weight(shape=(self.n_out, self.n_out * 4), initializer='uniform', name="wh")
-#
-#             self.b = self.add_weight(shape=(self.n_out * 4), initializer=tf.constant_initializer(0.0), name="b")
-#
-#
-#     def call(self, inputs, **kwargs):
-#         print('call ----- ')
-#         xs = batch_to_seq(inputs[0])
-#         print(f'xs {xs}')
-#         # need dones to reset states
-#         dones = batch_to_seq(inputs[1])
-#         print(f'dones {dones}')
-#
-#         s = tf.expand_dims(self.states, 0)
-#         print(f's {s}')
-#         c, h = tf.split(axis=1, num_or_size_splits=2, value=s)
-#         print(f'c {c}')
-#         print(f'h {h}')
-#         for ind, (x, done) in enumerate(zip(xs, dones)):
-#             c = c * (1 - done)
-#             h = h * (1 - done)
-#             z = tf.matmul(x, self.wx)
-#             z += tf.matmul(h, self.wh)
-#             z += self.b
-#             i, f, o, u = tf.split(axis=1, num_or_size_splits=4, value=z)
-#             i = tf.nn.sigmoid(i)
-#             f = tf.nn.sigmoid(f)
-#             o = tf.nn.sigmoid(o)
-#             u = tf.tanh(u)
-#             c = f * c + i * u
-#             h = o * tf.tanh(c)
-#             xs[ind] = h
-#         s = tf.concat(axis=1, values=[c, h])
-#         return seq_to_batch(xs), tf.squeeze(s)
+
+# initializers
+# """
+DEFAULT_SCALE = np.sqrt(2)
+DEFAULT_MODE = 'fan_in'
+
+def batch_to_seq(x):
+    n_step = x.shape[0]
+    if len(x.shape) == 1:
+        x = tf.expand_dims(x, -1)
+    return tf.split(axis=0, num_or_size_splits=n_step, value=x)
+
+
+def seq_to_batch(x):
+    return tf.concat(x, axis=0)
+
+class LSTM_M(tf.keras.layers.Layer):
+    def __init__(self, units=32, scope='LSTM_M', init_scale=DEFAULT_SCALE, init_mode=DEFAULT_MODE, init_method=DEFAULT_METHOD):
+        super(LSTM_M, self).__init__()
+        print('init ----- ')
+        self.units = units
+        self.scope = scope
+        self.init_scale = init_scale
+        self.init_mode = init_mode
+        self.init_method = init_method
+
+
+    def build(self, input_shape):
+        n_in = input_shape[0][1]
+        # self.n_out = input_shape[0][0] // 2
+        self.n_out = self.units
+        self.states = np.zeros(self.n_out * 2, dtype=np.float32)
+        print('build ----- ')
+        print(f'n_in is {n_in}')
+        print(f'self.n_out is {self.n_out}')
+        with tf.name_scope(self.scope):
+            self.wx = self.add_weight(shape=(n_in, self.n_out * 4), initializer='uniform', name="wx")
+
+            self.wh = self.add_weight(shape=(self.n_out, self.n_out * 4), initializer='uniform', name="wh")
+
+            self.b = self.add_weight(shape=(self.n_out * 4), initializer=tf.constant_initializer(0.0), name="b")
+
+
+    def call(self, inputs, **kwargs):
+        print('call ----- ')
+        xs = batch_to_seq(inputs[0])
+        print(f'xs {xs}')
+        # need dones to reset states
+        dones = batch_to_seq(inputs[1])
+        print(f'dones {dones}')
+
+        s = tf.expand_dims(self.states, 0)
+        print(f's {s}')
+        c, h = tf.split(axis=1, num_or_size_splits=2, value=s)
+        print(f'c {c}')
+        print(f'h {h}')
+        for ind, (x, done) in enumerate(zip(xs, dones)):
+            c = c * (1 - done)
+            h = h * (1 - done)
+            z = tf.matmul(x, self.wx)
+            z += tf.matmul(h, self.wh)
+            z += self.b
+            i, f, o, u = tf.split(axis=1, num_or_size_splits=4, value=z)
+            i = tf.nn.sigmoid(i)
+            f = tf.nn.sigmoid(f)
+            o = tf.nn.sigmoid(o)
+            u = tf.tanh(u)
+            c = f * c + i * u
+            h = o * tf.tanh(c)
+            xs[ind] = h
+        s = tf.concat(axis=1, values=[c, h])
+        return seq_to_batch(xs), tf.squeeze(s)
 #
 #
 # x = tf.ones((8, 16))

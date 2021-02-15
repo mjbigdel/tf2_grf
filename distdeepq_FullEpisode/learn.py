@@ -128,8 +128,9 @@ class Learn:
         :param fps:
         :return: loss and td errors tensor list one for each agent
         """
+        # print(f' obses_t.shape {obses_t.shape}')
         losses = []
-        td_errors = np.zeros(self.config.batch_size*self.config.n_steps)
+        td_errors = np.zeros(self.config.batch_size)
         for agent_id in self.agent_ids:
             if self.config.distributionalRL:
                 loss, td_error = self.agents[agent_id].compute_loss_dist(obses_t[agent_id], actions[agent_id],
@@ -212,7 +213,7 @@ class Learn:
 
             mb_obs, mb_rewards, mb_actions, mb_obs1, mb_dones = [], [], [], [], []
             while True:
-            # for n_step in range(self.config.n_steps):
+                # for n_step in range(self.config.n_steps):
                 t += 1
                 episode_length += 1
                 # print(f't is {t} -- n_steps is {n_step}')
@@ -245,8 +246,10 @@ class Learn:
                     break  # to break while as episode is finished here
 
             mb_obs.append(obs.copy())
+            mb_dones.append([float(done) for _ in self.agent_ids])
+
             # print(f' mb_obs.shape is {np.array(mb_obs).shape}')
-            for extra_step in range(self.config.n_steps - len(mb_actions)):
+            for extra_step in range(self.config.n_steps - len(mb_actions) + 1):
                 # print('extra_info as 0 s added')
                 mb_obs.append(obs * 0.)
                 mb_actions.append(actions * 0.)
@@ -254,15 +257,15 @@ class Learn:
                 # mb_fps.append(0, mb_fps[-1] * 0.)
                 mb_dones.append([float(0.) for _ in self.agent_ids])
 
-            mb_dones.append([float(done) for _ in self.agent_ids])
             # swap axes to have lists in shape of (num_agents, num_steps, ...)
             # print(f' mb_obs.shape is {np.array(mb_obs).shape}')
+            # print(f' mb_dones.shape is {np.array(mb_dones).shape}')
             mb_obs = np.asarray(mb_obs, dtype=obs[0].dtype).swapaxes(0, 1)
             # print(f' mb_obs.shape is {np.array(mb_obs).shape}')
             mb_actions = np.asarray(mb_actions, dtype=actions[0].dtype).swapaxes(0, 1)
             mb_rewards = np.asarray(mb_rewards, dtype=np.float32).swapaxes(0, 1)
             mb_dones = np.asarray(mb_dones, dtype=np.bool).swapaxes(0, 1)
-            mb_masks = mb_dones[:, :-1]
+            mb_masks = mb_dones  # [:, :-1]
             mb_dones = mb_dones[:, 1:]
 
 
@@ -277,6 +280,7 @@ class Learn:
                 if self.config.prioritized_replay:
                     experience = self.replay_memory.sample(self.config.batch_size, beta=self.beta_schedule.value(t))
                     (obses_t, actions, rewards, dones, weights, batch_idxes) = experience
+                    # print(f' dones.shape {dones.shape}')
                 else:
                     obses_t, actions, rewards, dones = self.replay_memory.sample(self.config.batch_size)
                     weights, batch_idxes = np.ones_like(rewards), None
@@ -284,8 +288,8 @@ class Learn:
                 # print(f'obses_t.shape {obses_t.shape}')
                 #  shape format is (batch_size, agent_num, n_steps, ...)
                 obses_t = obses_t.swapaxes(0, 1)
-                obses_t = obses_t[:,:,0:-1]
-                obses_tp1 = obses_t[:,:,-1]
+                obses_t = obses_t[:, :, 0:-1]
+                obses_tp1 = obses_t[:, :, -1]
                 # print(f'obses_t.shape {obses_t.shape}')
                 # print(f'obses_tp1.shape {obses_tp1.shape}')
                 actions = actions.swapaxes(0, 1)
@@ -294,9 +298,10 @@ class Learn:
                 # print(f'rewards.shape {rewards.shape}')
                 # obses_tp1 = obses_tp1.swapaxes(0, 1)
                 dones = dones.swapaxes(0, 1)
-                weights = np.expand_dims(weights, 2)
                 # print(f'weights.shape {weights.shape}')
-                _wt = np.tile(weights, (self.config.num_agents, 1, self.config.n_steps))
+                # weights = np.expand_dims(weights, 2)
+                # print(f'weights.shape {weights.shape}')
+                _wt = np.tile(weights, (self.config.num_agents, 1))
                 # print(f'_wt.shape {_wt.shape}')
                 # print(f'weights.shape {weights.shape}')
                 # weights = weights.swapaxes(0, 1)  # weights shape is (1, batch_size, n_steps)
@@ -304,7 +309,7 @@ class Learn:
                 #  shape format is (agent_num, batch_size, n_steps, ...)
 
 
-                # if 'rnnfhkjd' not in self.config.network:
+                # if 'rnn' not in self.config.network:
                 #     shape = obses_t.shape
                 #     obses_t = np.reshape(obses_t, (shape[0], shape[1] * shape[2], *shape[3:]))
                 #     # shape = obses_tp1.shape
@@ -318,8 +323,8 @@ class Learn:
                 #     shape = _wt.shape
                 #     _wt = np.reshape(_wt, (shape[0], shape[1] * shape[2], *shape[3:]))
 
-                    # print(f'obses_t.shape {obses_t.shape}')
-                    #  shape format is (agent_num, batch_size * n_steps, ...)
+                # print(f'obses_t.shape {obses_t.shape}')
+                #  shape format is (agent_num, batch_size * n_steps, ...)
 
                 # print(f' obses_t.shape {obses_t.shape}')
                 # print(f' obses_tp1.shape {obses_tp1.shape}')
@@ -336,11 +341,10 @@ class Learn:
                 _wt = tf.constant(_wt)
 
                 loss, td_errors = self.train(obses_t, actions, rewards, obses_tp1, dones, _wt)
-
+                # print(f' td_errors {td_errors}')
+                # td_errors = td_errors.reshape((self.config.batch_size, -1))
                 # print(f' td_errors.shape {td_errors.shape}')
-                td_errors = td_errors.reshape((self.config.batch_size, -1))
-                # print(f' td_errors.shape {td_errors.shape}')
-                td_errors = np.sum(td_errors, 1)
+                # td_errors = np.sum(td_errors, 1)
                 # print(f' td_errors.shape {td_errors.shape}')
 
                 # print(f'td_errors.shape = {np.array(td_errors).shape} , batch_idxes.shape = {np.array(batch_idxes).shape}')

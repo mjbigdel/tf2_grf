@@ -19,6 +19,8 @@ class Agent:
         self.delta_z = float(self.v_max - self.v_min) / (self.config.atoms - 1)
         self.z = [self.v_min + i * self.delta_z for i in range(self.config.atoms)]
 
+        self.dummy_done = tf.zeros((1, 1))
+
     def create_fingerprint(self, fps, t):
         # TODO
         fps = []
@@ -36,11 +38,16 @@ class Agent:
         :return: best values based on Q-Learning formula maxQ(s',a')
         """
         obs = tf.expand_dims(obs, axis=0)
-        q_tp1 = self.target_model(obs)
+        if self.config.is_recurrent:
+            inputs = [tf.expand_dims(obs, axis=0), self.dummy_done]
+        else:
+            inputs = obs
+
+        q_tp1 = self.target_model(inputs)
         # print(f' q_tp1 {q_tp1}')
 
         if self.config.double_q:
-            q_values_using_online_net = self.model(obs)
+            q_values_using_online_net = self.model(inputs)
             q_value_best_using_online_net = tf.argmax(q_values_using_online_net, 1)
             q_tp1_best = tf.reduce_sum(
                 q_tp1 * tf.one_hot(q_value_best_using_online_net, self.config.num_actions, dtype=tf.float32), 1)
@@ -56,8 +63,13 @@ class Agent:
         :return: best values based on Q-Learning formula maxQ(s',a')
         """
         obs = tf.expand_dims(obs, axis=0)
+        if self.config.is_recurrent:
+            inputs = [tf.expand_dims(obs, axis=0), self.dummy_done]
+        else:
+            inputs = obs
+
         # print(f' obs.shape {obs.shape}')
-        zz = self.target_model(obs)
+        zz = self.target_model(inputs)
         # print(f' zz.shape {zz.shape}')
         # z_concat = np.vstack(zz)
         # print(f' z_concat.shape {z_concat.shape}')
@@ -66,7 +78,7 @@ class Agent:
         # print(f' q_tp1.shape {q_tp1.shape}')
 
         if self.config.double_q:
-            z_using_online_net = self.model(obs)
+            z_using_online_net = self.model(inputs)
             # print(f' z_using_online_net.shape {z_using_online_net.shape}')
             # z_using_online_net_concat = np.vstack(z_using_online_net)
             # print(f' z_using_online_net_concat.shape {z_using_online_net_concat.shape}')
@@ -89,7 +101,12 @@ class Agent:
         """
         # print(f' greedy_action obs.shape {obs.shape}')
         obs = tf.expand_dims(obs, axis=0)
-        q_values = self.model(obs)
+        if self.config.is_recurrent:
+            inputs = [tf.expand_dims(obs, axis=0), self.dummy_done]
+        else:
+            inputs = obs
+
+        q_values = self.model(inputs)
         deterministic_actions = tf.argmax(q_values, axis=1)
 
         return deterministic_actions.numpy()[0], q_values.numpy()[0]
@@ -102,7 +119,14 @@ class Agent:
         """
         # print(f' greedy_action obs.shape {obs.shape}')
         obs = tf.expand_dims(obs, axis=0)
-        zz = self.model(obs)  # shape (1, 19, 8)
+
+        if self.config.is_recurrent:
+            inputs = [tf.expand_dims(obs, axis=0), self.dummy_done]
+        else:
+            inputs = obs
+
+
+        zz = self.model(inputs)  # shape (1, 19, 8)
         # print(f' zz.shape {zz.shape}')
         # z_concat = np.vstack(zz)
         # print(f' z_concat.shape {z_concat.shape}')
@@ -115,9 +139,18 @@ class Agent:
         return deterministic_actions.numpy()[0], q_values.numpy()[0]
 
     @tf.function()
-    def compute_loss(self, obses_t, actions, rewards, dones, weights, fps=None):
+    def compute_loss(self, obses_t, actions, rewards, obs_tp1, dones, weights, fps=None):
         # print(f' obs.shape {obses_t.shape}')
-        q_t = self.model(obses_t)
+        if self.config.is_recurrent:
+            inputs = [obses_t, dones]
+        else:
+            inputs = obses_t
+
+        q_t = self.model(inputs)
+
+        rewards = rewards[:, 0]
+        actions = actions[:, 0]
+        dones = dones[:, -1]
 
         q_t_selected = tf.reduce_sum(q_t * tf.one_hot(actions, self.config.num_actions, dtype=tf.float32), 1)
         # print(f'q_t_selected.shape is {q_t_selected.shape}')
@@ -129,14 +162,63 @@ class Agent:
 
         return weighted_loss, td_error
 
+    @tf.function()
+    def compute_loss_dist(self, obses_t, actions, rewards, obs_tp1, dones, weights, fps=None):
+        # print(f' obses_t.shape {obses_t.shape}')
+        # print(f' dones.shape {dones.shape}')
+        if self.config.is_recurrent:
+            inputs = [obses_t, dones[:, :-1]]
+        else:
+            inputs = obses_t[:, 0, :]
+
+        logits = self.model(inputs)
+        # print(f' logits.shape {logits.shape}')
+
+        obses_t = obses_t[:, 0, :]
+        rewards = rewards[:, 0]
+        actions = actions[:, 0]
+        dones = dones[:, -1]  # done for obs_tp1
+        # weights = weights[:, -1]
+
+        # print(f' obses_t.shape {obses_t.shape}')
+
+        m_prob = tf.stop_gradient(self.build_target_ditribution(obses_t, actions,
+                                                                rewards, obs_tp1, dones, weights, fps=None))
+
+        # print(f' m_prob.shape {np.array(m_prob).shape}')
+
+        # loss = tf.nn.softmax_cross_entropy_with_logits(labels=m_prob, logits=logits)
+        # loss = tf.reduce_mean(loss)
+        # td_error = 1.0
+
+        # print(f' loss {loss}')
+        td_error = logits - m_prob
+        # print(f' td_errors {td_error}')
+        td_error = tf.reduce_sum(td_error, axis=[1, 2])
+        # print(f' td_errors {td_error}')
+        errors = huber_loss(td_error)
+        # print(f' errors {errors}')
+        weighted_loss = tf.reduce_mean(weights * errors)
+        # print(f' weighted_loss {weighted_loss}')
+        loss = weighted_loss
+
+        # print(f' td_errors {td_error}')
+
+        return loss, td_error
+
     def build_target_ditribution(self, obses_t, actions, rewards, obs_tp1, dones, weights, fps=None):
-        zz = self.model(obs_tp1)
+        if self.config.is_recurrent:
+            inputs = [tf.expand_dims(obs_tp1, axis=1), tf.expand_dims(dones, axis=1)]
+        else:
+            inputs = obs_tp1
+
+        zz = self.model(inputs)
         # print(f' zz.shape {zz.shape}')
         q = tf.reduce_sum(tf.math.multiply(zz, self.z), axis=-1)
         # print(f' q.shape {q.shape}')
         next_actions = tf.argmax(q, axis=1)  # a* in C51 algo
 
-        zz_ = self.target_model(obs_tp1)
+        zz_ = self.target_model(inputs)
         # zz_ = tf.stop_gradient(zz_)
         # rewards = tf.stop_gradient(rewards)
         # print(f' zz_.shape {zz_.shape}')
@@ -165,34 +247,6 @@ class Agent:
                     m_prob[i][actions[i]][int(u)] += zz_[i][next_actions[i]][j] * (bj - l)
 
         return m_prob
-
-    @tf.function()
-    def compute_loss_dist(self, obses_t, actions, rewards, obs_tp1, dones, weights, fps=None):
-        # print(f' obses_t.shape {obses_t.shape}')
-        obses_t = obses_t[:, 0, :]
-        rewards = rewards[:, 0]
-        actions = actions[:, -1]
-        dones = dones[:, -1]
-        weights = weights[:, -1]
-
-        # print(f' obses_t.shape {obses_t.shape}')
-
-        logits = self.model(obses_t)
-        # print(f' logits.shape {logits.shape}')
-
-        m_prob = tf.stop_gradient(self.build_target_ditribution(obses_t, actions,
-                                                                rewards, obs_tp1, dones, weights, fps=None))
-
-        # print(f' m_prob.shape {np.array(m_prob).shape}')
-
-        loss = tf.nn.softmax_cross_entropy_with_logits(labels=m_prob, logits=logits)
-        # loss = self.loss_dist(m_prob, logits, sample_weight=None)
-
-        loss = tf.reduce_mean(loss)
-        # print(f' loss {loss}')
-
-        td_error = 0.0
-        return loss, td_error
 
     @tf.function(autograph=False)
     def update_target(self):

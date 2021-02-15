@@ -56,7 +56,8 @@ class ReplayBuffer:
             batch_rewards.append(rewards)
             batch_dones.append(dones)
             # batch_fps.append(fps)
-
+        # print(f'batch_dones is {batch_dones}')
+        # print(np.array(batch_dones).shape)
         return np.array(batch_obses_t, copy=False), np.array(batch_actions, copy=False), \
                np.array(batch_rewards, copy=False), np.array(batch_dones, copy=False)
                # np.array(batch_fps, copy=False)
@@ -64,10 +65,10 @@ class ReplayBuffer:
     def _sample_steps(self, episode):
         # print(f'{episode[1].shape[1]} - {self.n_steps} = {episode[1].shape[1]- self.n_steps}')
         start = random.randint(0, episode[1].shape[1] - self.n_steps)
-        obses_t = episode[0][:, start: start + self.n_steps]
+        obses_t = episode[0][:, start: start + self.n_steps + 1]  # +1 is to have St+n in n-step return
         actions = episode[1][:, start: start + self.n_steps]
         rewards = episode[2][:, start: start + self.n_steps]
-        dones = episode[3][:, start: start + self.n_steps]
+        dones = episode[3][:, start: start + self.n_steps + 1]
         # fps = episode[4][:, start: start + self.n_steps]
 
         return np.array(obses_t, copy=False), np.array(actions, copy=False),\

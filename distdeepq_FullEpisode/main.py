@@ -13,11 +13,11 @@ class Config:
         # minigrid -> 'MiniGrid-Empty-5x5-v0', ...
         self.environment_type = 'GFootball'  # gym, GFootball, multigrid, minigrid
         self.env_name = 'academy_empty_goal_close'  #
-        self.num_agents = 2
+        self.num_agents = 1
         self.max_episodes_length = 100
         self.num_episodes = 10000
         self.data_path = './plays/'
-        self.stacked = False
+        self.stacked = True
 
         # GFootbal Configs
         self.render_train = False
@@ -28,7 +28,7 @@ class Config:
         self.test_rewards = 'scoring'
 
         # Network Configs
-        self.network = 'cnn'  # 'impala_cnn', 'cnn', 'mlp'
+        self.network = 'impala_cnn_rnn'  # 'impala_cnn', 'cnn', 'mlp', 'impala_cnn_rnn', 'cnn_rnn', 'mlp_rnn'
         self.load_path = None
         self.save_path = './models'
         self.num_actions = 1
@@ -44,11 +44,16 @@ class Config:
         self.double_q = True
         self.distributionalRL = True
         self.noisy_layers = True
+        self.normalize_inputs = False
+        if 'rnn' in self.network:
+            self.is_recurrent = True
+        else:
+            self.is_recurrent = False
 
         self.seed = 12
-        self.num_timesteps = 1000000
+        self.num_timesteps = 500000
         self.batch_size = 8
-        self.n_steps = 32
+        self.n_steps = 4
         self.buffer_size = 1000
         self.learning_starts = 10
         self.print_freq = 10
@@ -68,8 +73,8 @@ class Config:
 
         self.conv_layers = [(32, 8, 4), (16, 4, 2), (16, 2, 1)]  # (filters, kernel, stride)
         self.impala_layers = [(16, 2), (32, 2), (32, 2), (32, 2)]  # (filters, kernel, stride)
-        self.fc1_dims = 256
-        self.fc2_dims = 256
+        self.fc1_dims = 64
+        self.fc2_dims = 64
         self.rnn_dim = 512
 
 
