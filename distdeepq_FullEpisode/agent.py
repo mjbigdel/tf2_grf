@@ -20,16 +20,7 @@ class Agent:
         self.z = [self.v_min + i * self.delta_z for i in range(self.config.atoms)]
 
         self.dummy_done = tf.zeros((1, 1))
-
-    def create_fingerprint(self, fps, t):
-        # TODO
-        fps = []
-        if self.config.num_agents > 1:
-            fp = fps[:self.agent_id]
-            fp.extend(fps[self.agent_id + 1:])
-            fp_a = np.concatenate((fp, [[self.exploration.value(t) * 100, t]]), axis=None)
-            fps.append(fp_a)
-        return fps
+        self.dummy_fps = tf.zeros((1, 1, config.fp_shape))
 
     @tf.function
     def max_value(self, obs):
@@ -39,7 +30,7 @@ class Agent:
         """
         obs = tf.expand_dims(obs, axis=0)
         if self.config.is_recurrent:
-            inputs = [tf.expand_dims(obs, axis=0), self.dummy_done]
+            inputs = [tf.expand_dims(obs, axis=0), self.dummy_done, self.dummy_fps]
         else:
             inputs = obs
 
@@ -64,7 +55,7 @@ class Agent:
         """
         obs = tf.expand_dims(obs, axis=0)
         if self.config.is_recurrent:
-            inputs = [tf.expand_dims(obs, axis=0), self.dummy_done]
+            inputs = [tf.expand_dims(obs, axis=0), self.dummy_done, self.dummy_fps]
         else:
             inputs = obs
 
@@ -102,7 +93,7 @@ class Agent:
         # print(f' greedy_action obs.shape {obs.shape}')
         obs = tf.expand_dims(obs, axis=0)
         if self.config.is_recurrent:
-            inputs = [tf.expand_dims(obs, axis=0), self.dummy_done]
+            inputs = [tf.expand_dims(obs, axis=0), self.dummy_done, self.dummy_fps]
         else:
             inputs = obs
 
@@ -121,7 +112,7 @@ class Agent:
         obs = tf.expand_dims(obs, axis=0)
 
         if self.config.is_recurrent:
-            inputs = [tf.expand_dims(obs, axis=0), self.dummy_done]
+            inputs = [tf.expand_dims(obs, axis=0), self.dummy_done, self.dummy_fps]
         else:
             inputs = obs
 
@@ -142,7 +133,7 @@ class Agent:
     def compute_loss(self, obses_t, actions, rewards, obs_tp1, dones, weights, fps=None):
         # print(f' obs.shape {obses_t.shape}')
         if self.config.is_recurrent:
-            inputs = [obses_t, dones]
+            inputs = [obses_t, dones, fps]
         else:
             inputs = obses_t
 
@@ -167,7 +158,7 @@ class Agent:
         # print(f' obses_t.shape {obses_t.shape}')
         # print(f' dones.shape {dones.shape}')
         if self.config.is_recurrent:
-            inputs = [obses_t, dones[:, :-1]]
+            inputs = [obses_t, dones[:, :-1], fps]
         else:
             inputs = obses_t[:, 0, :]
 
@@ -178,7 +169,7 @@ class Agent:
         rewards = rewards[:, 0]
         actions = actions[:, 0]
         dones = dones[:, -1]  # done for obs_tp1
-        # weights = weights[:, -1]
+        # fps = fps[:, -1]  # fps for obs_tp1
 
         # print(f' obses_t.shape {obses_t.shape}')
 
@@ -208,7 +199,8 @@ class Agent:
 
     def build_target_ditribution(self, obses_t, actions, rewards, obs_tp1, dones, weights, fps=None):
         if self.config.is_recurrent:
-            inputs = [tf.expand_dims(obs_tp1, axis=1), tf.expand_dims(dones, axis=1)]
+            inputs = [tf.expand_dims(obs_tp1, axis=1), tf.expand_dims(dones, axis=1),
+                      tf.tile(self.dummy_fps, (self.config.batch_size, 1, 1))]
         else:
             inputs = obs_tp1
 

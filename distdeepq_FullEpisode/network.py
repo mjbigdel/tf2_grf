@@ -174,8 +174,8 @@ def dense(units, name, k_init, b_init, act=tf.keras.activations.relu):
                                  bias_initializer=b_init, name=name)
 
 
-def noisy_dense(units, std_init=0.5):
-    return NoisyDense(units, scope="NoisyDense", std_init=0.5)
+def noisy_dense(units, scope='NoisyDense', std_init=0.5):
+    return NoisyDense(units, scope=scope, std_init=std_init)
     # return tfa.layers.NoisyDense(int(units), std_init)
 
 
@@ -406,6 +406,7 @@ def cnn_rnn(config):
     # inputs
     inputs_obs = tf.keras.layers.Input(shape=(config.n_steps, *config.obs_shape))
     done_Input = tf.keras.Input(shape=(config.n_steps, 1))
+    inputs_fps = tf.keras.Input(shape=(config.n_steps, config.fp_shape))
 
     # neural network
     if config.normalize_inputs:
@@ -422,16 +423,22 @@ def cnn_rnn(config):
     conv_out = TdL(tf.keras.layers.Flatten(name='flatten'))(conv_out)
 
     if config.noisy_layers:
-        conv_out = TdL(noisy_dense(config.fc1_dims))(conv_out)
+        conv_out = TdL(noisy_dense(config.fc1_dims, scope='noisy_dense1'))(conv_out)
         conv_out = tf.keras.layers.Activation(tf.nn.relu, name=f'act_noisyLayer')(conv_out)
+
+        fps_dense = TdL(noisy_dense(config.fps_dense_dim, scope='noisy_fps_dense'))(inputs_fps)
+        fps_dense = tf.keras.layers.Activation(tf.nn.relu, name=f'act_noisy_fps_dense')(fps_dense)
     else:
         conv_out = TdL(dense(config.fc1_dims, 'dense1', kernel_init, bias_init, tf.nn.relu))(conv_out)
+        fps_dense = TdL(dense(config.fps_dense_dim, 'noisy_fps_dense', kernel_init, bias_init, tf.nn.relu))(inputs_fps)
+
+    outputs = tf.keras.layers.concatenate([conv_out, fps_dense])
 
     # print(f'conv_out, {conv_out}')
     # print(f'done_Input, {done_Input}')
-    lstm_layer = LSTM_M(config.rnn_dim, return_sequence=False)([conv_out, done_Input])
+    lstm_layer = LSTM_M(config.rnn_dim, return_sequence=False)([outputs, done_Input])
 
-    return tf.keras.Model(inputs=[inputs_obs, done_Input], outputs=lstm_layer, name=config.network)
+    return tf.keras.Model(inputs=[inputs_obs, done_Input, inputs_fps], outputs=lstm_layer, name=config.network)
 
 
 def mlp(config):
@@ -522,6 +529,7 @@ def impala_cnn_rnn(config):
     # inputs
     inputs_obs = tf.keras.layers.Input(shape=(config.n_steps, *config.obs_shape))
     done_Input = tf.keras.Input(shape=(config.n_steps, 1))
+    inputs_fps = tf.keras.Input(shape=(config.n_steps, config.fp_shape))
 
     # neural network
     if config.normalize_inputs:
@@ -547,12 +555,19 @@ def impala_cnn_rnn(config):
     conv_out = tf.keras.layers.Activation(tf.nn.relu)(conv_out)
     conv_out = tf.keras.layers.BatchNormalization()(conv_out)
     conv_out = TdL(tf.keras.layers.Flatten())(conv_out)
+
     if config.noisy_layers:
         conv_out = TdL(noisy_dense(config.fc1_dims))(conv_out)
         conv_out = tf.keras.layers.Activation(tf.nn.relu, name=f'act_noisyLayer')(conv_out)
+
+        fps_dense = TdL(noisy_dense(config.fps_dense_dim, scope='noisy_fps_dense'))(inputs_fps)
+        fps_dense = tf.keras.layers.Activation(tf.nn.relu, name=f'act_noisy_fps_dense')(fps_dense)
     else:
         conv_out = TdL(dense(config.fc1_dims, 'dense1', kernel_init, bias_init, tf.nn.relu))(conv_out)
+        fps_dense = TdL(dense(config.fps_dense_dim, 'noisy_fps_dense', kernel_init, bias_init, tf.nn.relu))(inputs_fps)
 
-    lstm_layer = LSTM_M(config.rnn_dim, return_sequence=False)([conv_out, done_Input])
+    outputs = tf.keras.layers.concatenate([conv_out, fps_dense])
 
-    return tf.keras.Model(inputs=[inputs_obs, done_Input], outputs=lstm_layer, name=config.network)
+    lstm_layer = LSTM_M(config.rnn_dim, return_sequence=False)([outputs, done_Input])
+
+    return tf.keras.Model(inputs=[inputs_obs, done_Input, inputs_fps], outputs=lstm_layer, name=config.network)

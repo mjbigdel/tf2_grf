@@ -39,8 +39,8 @@ class ReplayBuffer:
         # return self._encode_sample(idxes)
         return self._sample_episode(idxes)
 
-    def add_episode(self, obses_t, actions, rewards, dones):
-        episode = (obses_t, actions, rewards, dones)
+    def add_episode(self, obses_t, actions, rewards, dones, fps):
+        episode = (obses_t, actions, rewards, dones, fps)
         if self._next_idx >= len(self._storage):
             self._storage.append(episode)
         else:
@@ -48,19 +48,19 @@ class ReplayBuffer:
         self._next_idx = (self._next_idx + 1) % self._maxsize
 
     def _sample_episode(self, idxes):
-        batch_obses_t, batch_actions, batch_rewards, batch_dones = [], [], [], []
+        batch_obses_t, batch_actions, batch_rewards, batch_dones, batch_fps = [], [], [], [], []
         for i in idxes:
-            obses_t, actions, rewards, dones = self._sample_steps(self._storage[i])
+            obses_t, actions, rewards, dones, fps = self._sample_steps(self._storage[i])
             batch_obses_t.append(obses_t)
             batch_actions.append(actions)
             batch_rewards.append(rewards)
             batch_dones.append(dones)
-            # batch_fps.append(fps)
+            batch_fps.append(fps)
         # print(f'batch_dones is {batch_dones}')
         # print(np.array(batch_dones).shape)
         return np.array(batch_obses_t, copy=False), np.array(batch_actions, copy=False), \
-               np.array(batch_rewards, copy=False), np.array(batch_dones, copy=False)
-               # np.array(batch_fps, copy=False)
+               np.array(batch_rewards, copy=False), np.array(batch_dones, copy=False), \
+               np.array(batch_fps, copy=False)
 
     def _sample_steps(self, episode):
         # print(f'{episode[1].shape[1]} - {self.n_steps} = {episode[1].shape[1]- self.n_steps}')
@@ -69,11 +69,11 @@ class ReplayBuffer:
         actions = episode[1][:, start: start + self.n_steps]
         rewards = episode[2][:, start: start + self.n_steps]
         dones = episode[3][:, start: start + self.n_steps + 1]
-        # fps = episode[4][:, start: start + self.n_steps]
+        fps = episode[4][:, start: start + self.n_steps]
 
         return np.array(obses_t, copy=False), np.array(actions, copy=False),\
-               np.array(rewards, copy=False), np.array(dones, copy=False)
-               # np.array(fps, copy=False)
+               np.array(rewards, copy=False), np.array(dones, copy=False), \
+               np.array(fps, copy=False)
 
 
 class PrioritizedReplayBuffer(ReplayBuffer):

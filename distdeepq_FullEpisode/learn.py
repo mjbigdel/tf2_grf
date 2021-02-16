@@ -33,6 +33,8 @@ class Learn:
                              self.target_models[agent_id], agent_id) for agent_id in self.agent_ids]
         self.support_z = np.linspace(-5.0, 5.0, self.config.atoms)
 
+        self.fps_zeros = np.zeros((self.config.num_agents, self.config.fp_shape))
+
     def _init_networks(self):
         network = Network(self.config, self.agent_ids)
         # base_model = network.init_base_model()
@@ -136,12 +138,12 @@ class Learn:
                 loss, td_error = self.agents[agent_id].compute_loss_dist(obses_t[agent_id], actions[agent_id],
                                                                          rewards[agent_id], obses_tp1[agent_id],
                                                                          dones[agent_id],
-                                                                         weights[agent_id], fps=None)
+                                                                         weights[agent_id], fps[agent_id])
             else:
                 loss, td_error = self.agents[agent_id].compute_loss(obses_t[agent_id], actions[agent_id],
                                                                     rewards[agent_id], obses_tp1[agent_id],
                                                                     dones[agent_id],
-                                                                    weights[agent_id], fps=None)
+                                                                    weights[agent_id], fps[agent_id])
             losses.append(loss)
             td_errors += td_error
 
@@ -170,17 +172,6 @@ class Learn:
 
         return loss, td_errors
 
-    def create_fingerprints(self, fps, t):
-        # TODO
-        fps = []
-        if self.config.num_agents > 1:
-            for agent_id in self.agent_ids:
-                fp = fps[:agent_id]
-                fp.extend(fps[agent_id + 1:])
-                fp_a = np.concatenate((fp, [[self.exploration.value(t) * 100, t]]), axis=None)
-                fps.append(fp_a)
-        return fps
-
     def compute_n_step_return(self, mb_rewards, mb_dones, obs1):
         if self.config.gamma > 0.0:
             # print(f' last_values {last_values}')
@@ -198,6 +189,16 @@ class Learn:
 
         return mb_rewards
 
+    def create_fingerprints(self, fps, t):
+        fps_ = []
+        for agent_id in self.agent_ids:
+            fp = fps[:agent_id]
+            fp.extend(fps[agent_id + 1:])
+            fp_a = np.concatenate((fp, [[self.exploration.value(t) * 100, t]]), axis=None)
+            # print(f' fp_a.shape is {np.array(fp_a).shape}')
+            fps_.append(fp_a)
+        return fps_
+
     def learn(self):
         episode_rewards = [0.0]
         obs = self.env.reset()
@@ -211,18 +212,21 @@ class Learn:
             episode_length = 0
             update_eps = tf.constant(self.exploration.value(t))
 
-            mb_obs, mb_rewards, mb_actions, mb_obs1, mb_dones = [], [], [], [], []
+            mb_obs, mb_rewards, mb_actions, mb_obs1, mb_dones, mb_fps = [], [], [], [], [], []
             while True:
                 # for n_step in range(self.config.n_steps):
                 t += 1
                 episode_length += 1
                 # print(f't is {t} -- n_steps is {n_step}')
-                actions, _ = self.get_actions(tf.constant(obs), update_eps=update_eps)
+                actions, fps = self.get_actions(tf.constant(obs), update_eps=update_eps)
+                # print(f' fps.shape is {np.array(fps).shape}')
                 if self.config.num_agents == 1:
                     obs1, rews, done, _ = self.env.step(actions[0])
                 else:
                     obs1, rews, done, _ = self.env.step(actions)
-                    # TODO fingerprint computation
+                    fps_ = self.create_fingerprints(fps, t)
+                    # print(f' fps_.shape is {np.array(fps_).shape}')
+                    mb_fps.append(fps_)
 
                 mb_obs.append(obs.copy())
                 mb_actions.append(actions)
@@ -254,8 +258,10 @@ class Learn:
                 mb_obs.append(obs * 0.)
                 mb_actions.append(actions * 0.)
                 mb_rewards.append(np.array(rews) * 0.)
-                # mb_fps.append(0, mb_fps[-1] * 0.)
+                mb_fps.append(self.fps_zeros)
                 mb_dones.append([float(0.) for _ in self.agent_ids])
+
+            # print(f' mb_fps.shape is {np.array(mb_fps).shape}')
 
             # swap axes to have lists in shape of (num_agents, num_steps, ...)
             # print(f' mb_obs.shape is {np.array(mb_obs).shape}')
@@ -265,6 +271,7 @@ class Learn:
             mb_actions = np.asarray(mb_actions, dtype=actions[0].dtype).swapaxes(0, 1)
             mb_rewards = np.asarray(mb_rewards, dtype=np.float32).swapaxes(0, 1)
             mb_dones = np.asarray(mb_dones, dtype=np.bool).swapaxes(0, 1)
+            mb_fps = np.asarray(mb_fps, dtype=np.float32).swapaxes(0, 1)
             mb_masks = mb_dones  # [:, :-1]
             mb_dones = mb_dones[:, 1:]
 
@@ -274,15 +281,15 @@ class Learn:
             # print(f' after discount mb_rewards is {mb_rewards}')
 
             if self.config.replay_buffer is not None:
-                self.replay_memory.add_episode(mb_obs, mb_actions, mb_rewards, mb_masks)
+                self.replay_memory.add_episode(mb_obs, mb_actions, mb_rewards, mb_masks, mb_fps)
 
             if ep > self.config.learning_starts:
                 if self.config.prioritized_replay:
                     experience = self.replay_memory.sample(self.config.batch_size, beta=self.beta_schedule.value(t))
-                    (obses_t, actions, rewards, dones, weights, batch_idxes) = experience
+                    (obses_t, actions, rewards, dones, fps, weights, batch_idxes) = experience
                     # print(f' dones.shape {dones.shape}')
                 else:
-                    obses_t, actions, rewards, dones = self.replay_memory.sample(self.config.batch_size)
+                    obses_t, actions, rewards, dones, fps = self.replay_memory.sample(self.config.batch_size)
                     weights, batch_idxes = np.ones_like(rewards), None
 
                 # print(f'obses_t.shape {obses_t.shape}')
@@ -298,6 +305,7 @@ class Learn:
                 # print(f'rewards.shape {rewards.shape}')
                 # obses_tp1 = obses_tp1.swapaxes(0, 1)
                 dones = dones.swapaxes(0, 1)
+                fps = fps.swapaxes(0, 1)
                 # print(f'weights.shape {weights.shape}')
                 # weights = np.expand_dims(weights, 2)
                 # print(f'weights.shape {weights.shape}')
@@ -338,9 +346,10 @@ class Learn:
                 actions = tf.constant(actions)
                 rewards = tf.constant(rewards)
                 dones = tf.constant(dones)
+                fps = tf.constant(fps)
                 _wt = tf.constant(_wt)
 
-                loss, td_errors = self.train(obses_t, actions, rewards, obses_tp1, dones, _wt)
+                loss, td_errors = self.train(obses_t, actions, rewards, obses_tp1, dones, _wt, fps)
                 # print(f' td_errors {td_errors}')
                 # td_errors = td_errors.reshape((self.config.batch_size, -1))
                 # print(f' td_errors.shape {td_errors.shape}')

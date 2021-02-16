@@ -12,23 +12,23 @@ class Config:
         # multigrid -> 'soccer', ...
         # minigrid -> 'MiniGrid-Empty-5x5-v0', ...
         self.environment_type = 'GFootball'  # gym, GFootball, multigrid, minigrid
-        self.env_name = 'academy_empty_goal_close'  #
-        self.num_agents = 1
-        self.max_episodes_length = 100
+        self.env_name = 'academy_3_vs_1_with_keeper'  #
+        self.num_agents = 3
+        self.max_episodes_length = 150
         self.num_episodes = 10000
         self.data_path = './plays/'
         self.stacked = True
 
         # GFootbal Configs
         self.render_train = False
-        self.render_test = False
+        self.render_test = True
         self.channel_dim = (96//2, 72//2)
         self.representationType = 'extracted'  # 'extracted': minimaps, 'pixels': raw pixels, 'simple115': vector of 115
         self.train_rewards = 'checkpoints,scoring'
         self.test_rewards = 'scoring'
 
         # Network Configs
-        self.network = 'impala_cnn_rnn'  # 'impala_cnn', 'cnn', 'mlp', 'impala_cnn_rnn', 'cnn_rnn', 'mlp_rnn'
+        self.network = 'cnn_rnn'  # 'impala_cnn', 'cnn', 'mlp', 'impala_cnn_rnn', 'cnn_rnn', 'mlp_rnn'
         self.load_path = None
         self.save_path = './models'
         self.num_actions = 1
@@ -39,7 +39,7 @@ class Config:
         self.fp_shape = 0
         self.target_network_update_freq = 10
         self.tau = 0.001
-        self.atoms = 16
+        self.atoms = 8
         self.dueling = True
         self.double_q = True
         self.distributionalRL = True
@@ -53,7 +53,7 @@ class Config:
         self.seed = 12
         self.num_timesteps = 500000
         self.batch_size = 8
-        self.n_steps = 4
+        self.n_steps = 16
         self.buffer_size = 1000
         self.learning_starts = 10
         self.print_freq = 10
@@ -68,14 +68,15 @@ class Config:
         self.prioritized_replay_beta_iters = None
         self.prioritized_replay_beta0 = 0.4
         self.prioritized_replay_eps = 1e-6
-        self.num_tests = 10
+        self.num_tests = 5
         self.playing_test = 100
 
         self.conv_layers = [(32, 8, 4), (16, 4, 2), (16, 2, 1)]  # (filters, kernel, stride)
         self.impala_layers = [(16, 2), (32, 2), (32, 2), (32, 2)]  # (filters, kernel, stride)
-        self.fc1_dims = 64
+        self.fc1_dims = 128
         self.fc2_dims = 64
-        self.rnn_dim = 512
+        self.rnn_dim = 64
+        self.fps_dense_dim = 32
 
 
 # main
